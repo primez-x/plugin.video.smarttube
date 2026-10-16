@@ -1,0 +1,418 @@
+#!/usr/bin/env python3
+"""Primez publish check for a Kodi add-on repository.
+
+Copied unchanged into every published add-on repository as
+``.githooks/publish_check.py`` (the master copy lives in
+primez-x/kodi.addons ``tools/publish_check.py``). It enforces the rules the
+repository publish (kodi.addons ``tools/build_repository.py``) applies, so an
+update is rejected before it is pushed instead of failing the publish:
+
+* the root ``addon.xml`` parses and has a dot-separated numeric version,
+* that version is greater than the one it replaces, and is exactly one step
+  above it: one component +1 and every component to its right reset to 0,
+  with the same number of components (see VERSIONING.md in kodi.addons for
+  which component to raise). A deliberate jump, e.g. adopting a newer
+  upstream version, needs a ``Version-Jump: <reason>`` line in the pushed
+  commit message,
+* the first line of ``<news>`` names that version,
+* every test command in ``.primez-publish.json`` passes on the exact commit.
+
+A push that does not change the deployed add-on is not a release: it needs no
+version step or news entry, so Kodi is not offered an update that changes
+nothing. That is a push changing only files the zip never contains (tests, CI
+and hooks, docs, Markdown, dev tool configs, ``.primez-publish.json``; see
+NON_SHIPPED_PATTERNS), or one whose tip commit has a ``No-Release: <reason>``
+line for shipped changes without effect (comments, formatting). Its tests
+still run. The repository publish keeps the published zip for such a commit.
+
+Usage:
+    publish_check.py pre-push <remote> <url>   (git pre-push hook, refs on stdin)
+    publish_check.py ci                        (GitHub Actions: HEAD vs. published)
+    publish_check.py check [<commit>]          (manual: commit vs. its tracked branch)
+
+``.primez-publish.json`` (repository root)::
+
+    {"branch": "main",
+     "tests": [["python3", "-m", "unittest", "discover", "-s", "tests"]],
+     "test_env": {"PYTHONPATH": "resources/lib"}}
+
+A leading "python3" in a test command runs with the interpreter running this
+script. Bypass in an emergency with ``git push --no-verify``; the repository
+publish still enforces the same rules.
+"""
+
+import importlib.util
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.error
+import urllib.request
+import fnmatch
+import xml.etree.ElementTree as ET
+
+CONFIG_FILE = ".primez-publish.json"
+DEFAULT_PUBLISHED_BASE_URL = "https://primez-x.github.io/kodi.addons/"
+TEST_TIMEOUT_SECONDS = int(os.environ.get("PRIMEZ_TEST_TIMEOUT", "900"))
+ZERO_SHA = re.compile(r"^0+$")
+
+# Paths the repository publish never packs into the add-on zip; keep in sync
+# with DEFAULT_EXCLUDES in kodi.addons tools/build_repository.py (a test there
+# checks it). A push touching only these is not a release.
+NON_SHIPPED_PATTERNS = (
+    ".git", ".git/*", ".github", ".github/*", ".claude", ".claude/*", ".DS_Store",
+    ".codacy.yaml", ".gitattributes", ".gitignore", ".idea", ".idea/*",
+    ".mypy_cache", ".mypy_cache/*", ".pytest_cache", ".pytest_cache/*",
+    ".ruff_cache", ".ruff_cache/*", ".vscode", ".vscode/*", "__pycache__",
+    "__pycache__/*", "*.pyc", "*.pyo", "docs", "docs/*", "README", "README.*",
+    "Readme.*", "test_*.py", "tests", "tests/*", "node_modules", "node_modules/*",
+    "pyproject.toml", ".githooks", ".githooks/*", ".primez-publish.json",
+    "CLAUDE.md", "AGENTS.md",
+    "*.md", "CONTRIBUTING", "CONTRIBUTING.*", ".pylintrc", "pylintrc", ".flake8",
+    "setup.cfg", "tox.ini", "Makefile", "requirements*.txt", "codecov.yml",
+    ".editorconfig", ".pre-commit-config.yaml",
+)
+
+
+class CheckError(Exception):
+    pass
+
+
+def git(*args, check=True):
+    result = subprocess.run(
+        ["git"] + list(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if check and result.returncode != 0:
+        raise CheckError("git %s failed: %s" % (" ".join(args), result.stderr.decode().strip()))
+    return result
+
+
+def show_file(commit, path):
+    result = git("show", "%s:%s" % (commit, path), check=False)
+    return result.stdout if result.returncode == 0 else None
+
+
+def commit_exists(commit):
+    return git("cat-file", "-e", "%s^{commit}" % commit, check=False).returncode == 0
+
+
+def is_shipped(path):
+    """True if the repository publish would pack this repository path."""
+    if any(part in {".git", ".github", "__pycache__"} for part in path.split("/")):
+        return False
+    return not any(fnmatch.fnmatch(path, pattern) for pattern in NON_SHIPPED_PATTERNS)
+
+
+def shipped_changes(base, commit):
+    """Shipped paths that differ between base and commit (renames count both ways)."""
+    names = git("diff", "--name-only", "--no-renames", base, commit).stdout.decode("utf-8", "replace")
+    return [name for name in names.splitlines() if name and is_shipped(name)]
+
+
+def declares_no_release(commit):
+    message = git("log", "-1", "--format=%B", commit).stdout.decode("utf-8", "replace")
+    return bool(NO_RELEASE_TRAILER.search(message))
+
+
+def is_release(base, commit):
+    """A push is a release unless base exists and it changes nothing that affects
+    the deployed add-on: only non-shipped files, or shipped changes the tip
+    commit declares inert with a 'No-Release: <reason>' line. Changing the
+    version always makes it a release."""
+    if not (base and commit_exists(base)):
+        return True
+    changed = shipped_changes(base, commit)
+    if not changed:
+        return False
+    if "addon.xml" in changed and version_at(base) != version_at(commit):
+        return True
+    if declares_no_release(commit):
+        print("publish check: No-Release declared; shipped changes without effect: %s"
+              % ", ".join(changed[:8]))
+        return False
+    return True
+
+
+def load_config(commit):
+    raw = show_file(commit, CONFIG_FILE)
+    if raw is None:
+        raise CheckError("%s is missing in %s" % (CONFIG_FILE, commit[:12]))
+    try:
+        config = json.loads(raw.decode("utf-8"))
+    except ValueError as exc:
+        raise CheckError("%s is not valid JSON: %s" % (CONFIG_FILE, exc))
+    if not config.get("branch"):
+        raise CheckError('%s needs a "branch"' % CONFIG_FILE)
+    return config
+
+
+def parse_version(value):
+    parts = (value or "").strip().split(".")
+    if not parts or any(not part.isdecimal() for part in parts):
+        raise CheckError("addon.xml version %r is not dot-separated numbers" % value)
+    return tuple(int(part) for part in parts)
+
+
+def compare_versions(left, right):
+    left, right = parse_version(left), parse_version(right)
+    width = max(len(left), len(right))
+    left += (0,) * (width - len(left))
+    right += (0,) * (width - len(right))
+    return (left > right) - (left < right)
+
+
+VERSION_JUMP_TRAILER = re.compile(r"^Version-Jump:\s*\S", re.MULTILINE)
+# A shipped change with no effect on the deployed add-on (comments, formatting,
+# dead code): declared on the tip commit, it is not a release either.
+NO_RELEASE_TRAILER = re.compile(r"^No-Release:\s*\S", re.MULTILINE)
+
+
+def next_versions(previous):
+    """The versions one step above previous: x.y.z -> x+1.0.0, x.y+1.0, x.y.z+1."""
+    parts = parse_version(previous)
+    return [".".join(str(part) for part in parts[:index] + (parts[index] + 1,)
+                     + (0,) * (len(parts) - index - 1))
+            for index in range(len(parts))]
+
+
+def check_version_step(version, previous, commit, commit_message=None):
+    """Require a single-step increment unless the commit declares a jump."""
+    if previous is None or compare_versions(version, previous) <= 0:
+        return
+    allowed = next_versions(previous)
+    if parse_version(version) in [parse_version(item) for item in allowed]:
+        return
+    message = commit_message
+    if message is None:
+        message = git("log", "-1", "--format=%B", commit).stdout.decode("utf-8", "replace")
+    if VERSION_JUMP_TRAILER.search(message):
+        print("publish check: version jump %s -> %s declared by Version-Jump" % (previous, version))
+        return
+    raise CheckError(
+        "version %s is not one step above %s; use one of %s (raise one component by 1 "
+        "and reset the ones after it, see VERSIONING.md in kodi.addons) or add a "
+        "'Version-Jump: <reason>' line to the commit message"
+        % (version, previous, ", ".join(allowed)))
+
+
+def addon_info(raw_xml, where):
+    if raw_xml is None:
+        raise CheckError("addon.xml is missing in %s" % where)
+    try:
+        root = ET.fromstring(raw_xml)
+    except ET.ParseError as exc:
+        raise CheckError("addon.xml in %s is not valid XML: %s" % (where, exc))
+    if root.tag != "addon" or not root.get("id") or not root.get("version"):
+        raise CheckError("addon.xml in %s needs an <addon> with id and version" % where)
+    parse_version(root.get("version"))
+    news = root.find("extension[@point='xbmc.addon.metadata']/news")
+    first_line = ""
+    if news is not None and news.text:
+        first_line = next((line.strip() for line in news.text.splitlines() if line.strip()), "")
+    return root.get("id"), root.get("version"), first_line
+
+
+def check_news(version, first_line):
+    if not re.search(r"(?<![\d.])v?%s(?![\d.]*\d)" % re.escape(version), first_line):
+        raise CheckError(
+            "the first line of <news> must name version %s (found %r); add a news entry "
+            "for this release on top" % (version, first_line))
+
+
+def fetch(url):
+    request = urllib.request.Request(url, headers={"User-Agent": "primez-publish-check"})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return response.read()
+
+
+def published_state(config, addon_id, repository):
+    """Return (published version or None, published sha or None)."""
+    base = config.get("published_base_url", DEFAULT_PUBLISHED_BASE_URL)
+    base = base if base.endswith("/") else base + "/"
+    try:
+        addons = ET.fromstring(fetch(base + "addons.xml"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None, None
+        raise CheckError("could not read the published addons.xml: HTTP %s" % exc.code)
+    except (urllib.error.URLError, OSError, ET.ParseError) as exc:
+        raise CheckError("could not read the published addons.xml: %s" % exc)
+    version = next((addon.get("version") for addon in addons.findall("addon")
+                    if addon.get("id") == addon_id), None)
+    sha = None
+    try:
+        manifest = json.loads(fetch(base + "source-manifest.json").decode("utf-8"))
+        for entry in manifest.get("addons", []):
+            if entry.get("id") == addon_id and (
+                    not repository or entry.get("repository") == repository):
+                sha = entry.get("sha")
+    except (urllib.error.URLError, OSError, ValueError):
+        pass
+    return version, sha
+
+
+def export_commit(commit, destination):
+    archive = git("archive", "--format=tar", commit).stdout
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+        if hasattr(tarfile, "data_filter"):
+            tar.extractall(destination, filter="data")
+        else:
+            tar.extractall(destination)
+
+
+def run_tests(commit, config, local):
+    commands = config.get("tests") or []
+    if not commands:
+        print("publish check: no tests configured")
+        return
+    env = dict(os.environ)
+    env.update({key: str(value) for key, value in config.get("test_env", {}).items()})
+    env.pop("GITHUB_TOKEN", None)
+    with tempfile.TemporaryDirectory(prefix="primez-publish-check-") as root:
+        export_commit(commit, root)
+        for command in commands:
+            argv = [sys.executable if index == 0 and part == "python3" else part
+                    for index, part in enumerate(command)]
+            if local and len(argv) > 2 and argv[1] == "-m" \
+                    and importlib.util.find_spec(argv[2]) is None:
+                print("publish check: WARNING: skipping %r, Python module %r is not "
+                      "installed here (the repository publish still runs it)"
+                      % (" ".join(command), argv[2]))
+                continue
+            print("publish check: running %s" % " ".join(command))
+            try:
+                result = subprocess.run(
+                    argv, cwd=root, env=env, stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT, timeout=TEST_TIMEOUT_SECONDS, check=False)
+            except subprocess.TimeoutExpired:
+                raise CheckError("tests timed out after %ss: %s"
+                                 % (TEST_TIMEOUT_SECONDS, " ".join(command)))
+            if result.returncode != 0:
+                tail = "\n".join(result.stdout.decode("utf-8", "replace").splitlines()[-40:])
+                raise CheckError("tests failed (exit %s): %s\n%s"
+                                 % (result.returncode, " ".join(command), tail))
+
+
+def check_commit(commit, config, previous_version, local, already_published=False,
+                 minimum_version=None, release=True):
+    """Check one commit.
+
+    previous_version is the version on the branch it replaces (or None); the
+    new version must be one step above it. minimum_version (e.g. the
+    published one) must also be exceeded. A non-release (release=False: only
+    non-shipped files changed) skips the version and news rules.
+    """
+    addon_id, version, news = addon_info(show_file(commit, "addon.xml"), commit[:12])
+    if not release:
+        print("publish check: %s %s: only files that are not shipped changed; "
+              "no release, no version step needed" % (addon_id, version))
+        run_tests(commit, config, local)
+        print("publish check: %s %s OK (not a release)" % (addon_id, version))
+        return
+    if already_published:
+        print("publish check: %s %s is already published from this commit" % (addon_id, version))
+    else:
+        for floor in (previous_version, minimum_version):
+            if floor is not None and compare_versions(version, floor) <= 0:
+                raise CheckError(
+                    "%s version must increase: %s does not exceed %s. Bump the version in "
+                    "addon.xml (and add a news entry) in this push"
+                    % (addon_id, version, floor))
+        check_version_step(version, previous_version, commit)
+    check_news(version, news)
+    run_tests(commit, config, local)
+    print("publish check: %s %s OK" % (addon_id, version))
+
+
+def pre_push(lines):
+    checked = False
+    for line in lines:
+        parts = line.split()
+        if len(parts) != 4:
+            continue
+        _local_ref, local_sha, remote_ref, remote_sha = parts
+        if ZERO_SHA.match(local_sha):
+            continue  # deleting a ref
+        config = load_config(local_sha)
+        if remote_ref != "refs/heads/%s" % config["branch"]:
+            continue
+        previous = None
+        if not ZERO_SHA.match(remote_sha):
+            if not commit_exists(remote_sha):
+                raise CheckError("the remote %s has commits you don't have; pull first"
+                                 % config["branch"])
+            previous = addon_info(show_file(remote_sha, "addon.xml"), remote_sha[:12])[1]
+        print("publish check: checking %s -> %s" % (local_sha[:12], config["branch"]))
+        release = previous is None or is_release(remote_sha, local_sha)
+        check_commit(local_sha, config, previous, local=True, release=release)
+        checked = True
+    return checked
+
+
+def version_at(commit):
+    raw = show_file(commit, "addon.xml") if commit and commit_exists(commit) else None
+    return addon_info(raw, commit[:12])[1] if raw is not None else None
+
+
+def ci():
+    commit = git("rev-parse", os.environ.get("GITHUB_SHA") or "HEAD").stdout.decode().strip()
+    config = load_config(commit)
+    addon_id, _version, _news = addon_info(show_file(commit, "addon.xml"), commit[:12])
+    published_version, published_sha = published_state(
+        config, addon_id, os.environ.get("GITHUB_REPOSITORY"))
+    # The branch tip before this push (PRIMEZ_BEFORE_SHA, from the push event)
+    # or the first parent (a pull request's merge commit has the base first)
+    before = os.environ.get("PRIMEZ_BEFORE_SHA", "")
+    base = before if before and not ZERO_SHA.match(before) else None
+    previous = version_at(base) if base else None
+    if previous is None:
+        parent = git("rev-parse", "-q", "--verify", "%s^" % commit, check=False)
+        base = parent.stdout.decode().strip() if parent.returncode == 0 else None
+        previous = version_at(base) if base else None
+    # Classify the pushed range. Publication can lag behind a test-only correction.
+    release = (previous is None or is_release(base, commit)
+               or compare_versions(_version, previous) != 0)
+    check_commit(commit, config, previous, local=False,
+                 already_published=published_sha == commit,
+                 minimum_version=published_version, release=release)
+
+
+def manual(commit):
+    commit = git("rev-parse", commit).stdout.decode().strip()
+    config = load_config(commit)
+    remote = "origin/%s" % config["branch"]
+    previous = None
+    release = True
+    if git("rev-parse", "--verify", "-q", remote, check=False).returncode == 0:
+        remote_sha = git("rev-parse", remote).stdout.decode().strip()
+        if remote_sha == commit:
+            print("publish check: %s is the tip of %s; comparing with its parent" % (commit[:12], remote))
+            remote_sha = git("rev-parse", "%s^" % commit, check=False).stdout.decode().strip()
+        if remote_sha and commit_exists(remote_sha):
+            previous = addon_info(show_file(remote_sha, "addon.xml"), remote_sha[:12])[1]
+            release = is_release(remote_sha, commit)
+    check_commit(commit, config, previous, local=True, release=release)
+
+
+def main(argv):
+    mode = argv[1] if len(argv) > 1 else "check"
+    try:
+        if mode == "pre-push":
+            pre_push(sys.stdin.read().splitlines())
+        elif mode == "ci":
+            ci()
+        elif mode == "check":
+            manual(argv[2] if len(argv) > 2 else "HEAD")
+        else:
+            raise CheckError("unknown mode %r" % mode)
+    except CheckError as exc:
+        print("publish check FAILED: %s" % exc, file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -1,0 +1,88 @@
+# Kodi Media Center language file
+# Addon Name: SmartTube
+# Addon id: plugin.video.smarttube
+# Addon Provider: primez-x
+
+msgid ""
+msgstr ""
+
+# Settings categories
+msgctxt "#32001"
+msgid "General"
+msgstr ""
+
+msgctxt "#32002"
+msgid "Extras"
+msgstr ""
+
+msgctxt "#32003"
+msgid "SponsorBlock"
+msgstr ""
+
+# Menus and playback
+msgctxt "#32010"
+msgid "Search"
+msgstr ""
+
+msgctxt "#32011"
+msgid "Home"
+msgstr ""
+
+msgctxt "#32012"
+msgid "Next page"
+msgstr ""
+
+msgctxt "#32013"
+msgid "Channel is not live"
+msgstr ""
+
+msgctxt "#32014"
+msgid "No video selected"
+msgstr ""
+
+msgctxt "#32015"
+msgid "Skipped sponsored segment"
+msgstr ""
+
+# General settings
+msgctxt "#32020"
+msgid "Language (e.g. en)"
+msgstr ""
+
+msgctxt "#32021"
+msgid "Region (e.g. US)"
+msgstr ""
+
+# Extras settings
+msgctxt "#32030"
+msgid "DeArrow titles and thumbnails"
+msgstr ""
+
+msgctxt "#32031"
+msgid "Show like/dislike counts (Return YouTube Dislike)"
+msgstr ""
+
+# SponsorBlock settings
+msgctxt "#32040"
+msgid "Skip with SponsorBlock"
+msgstr ""
+
+msgctxt "#32041"
+msgid "Sponsors and self-promotion"
+msgstr ""
+
+msgctxt "#32042"
+msgid "Intros, outros and previews"
+msgstr ""
+
+msgctxt "#32043"
+msgid "Interaction reminders"
+msgstr ""
+
+msgctxt "#32044"
+msgid "Filler and off-topic music"
+msgstr ""
+
+msgctxt "#32045"
+msgid "Notify when a segment is skipped"
+msgstr ""

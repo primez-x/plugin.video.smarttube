@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<settings version="1">
+    <section id="plugin.video.smarttube">
+        <category id="general" label="32001" help=""> <!-- General -->
+            <group id="1" label="">
+                <setting id="language" type="string" label="32020" help=""> <!-- Language (e.g. en) -->
+                    <level>0</level>
+                    <default>en</default>
+                    <constraints>
+                        <allowempty>false</allowempty>
+                    </constraints>
+                    <control type="edit" format="string">
+                        <heading>32020</heading>
+                    </control>
+                </setting>
+                <setting id="region" type="string" label="32021" help=""> <!-- Region (e.g. US) -->
+                    <level>0</level>
+                    <default>US</default>
+                    <constraints>
+                        <allowempty>false</allowempty>
+                    </constraints>
+                    <control type="edit" format="string">
+                        <heading>32021</heading>
+                    </control>
+                </setting>
+            </group>
+        </category>
+        <category id="extras" label="32002" help=""> <!-- Extras -->
+            <group id="1" label="">
+                <setting id="dearrow" type="boolean" label="32030" help=""> <!-- DeArrow titles and thumbnails -->
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle" />
+                </setting>
+                <setting id="dislikes" type="boolean" label="32031" help=""> <!-- Show like/dislike counts (Return YouTube Dislike) -->
+                    <level>0</level>
+                    <default>false</default>
+                    <control type="toggle" />
+                </setting>
+            </group>
+        </category>
+        <category id="sponsorblock" label="32003" help=""> <!-- SponsorBlock -->
+            <group id="1" label="">
+                <setting id="sponsorblock" type="boolean" label="32040" help=""> <!-- Skip with SponsorBlock -->
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle" />
+                </setting>
+                <setting id="sponsorblock_sponsor" type="boolean" label="32041" help=""> <!-- Sponsors and self-promotion -->
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle" />
+                </setting>
+                <setting id="sponsorblock_intro_outro" type="boolean" label="32042" help=""> <!-- Intros, outros and previews -->
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle" />
+                </setting>
+                <setting id="sponsorblock_interaction" type="boolean" label="32043" help=""> <!-- Interaction reminders -->
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle" />
+                </setting>
+                <setting id="sponsorblock_filler" type="boolean" label="32044" help=""> <!-- Filler and off-topic music -->
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle" />
+                </setting>
+                <setting id="sponsorblock_notify" type="boolean" label="32045" help=""> <!-- Notify when a segment is skipped -->
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle" />
+                </setting>
+            </group>
+        </category>
+    </section>
+</settings>

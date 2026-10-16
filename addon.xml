@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.video.smarttube" name="SmartTube" version="0.1.0" provider-name="primez-x">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+        <import addon="inputstream.adaptive" version="19.0.0"/>
+    </requires>
+    <extension point="xbmc.python.pluginsource" library="resources/lib/plugin.py">
+        <provides>video</provides>
+    </extension>
+    <extension point="xbmc.service" library="resources/lib/service.py"/>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="en_GB">SmartTube for Kodi</summary>
+        <description lang="en_GB">YouTube for Kodi without the bloat: search, browse and play with no API key and no sign-in, on Windows, Linux, CoreELEC, Android and every other Kodi platform. SponsorBlock skips sponsored segments during playback and DeArrow replaces clickbait titles and thumbnails. Unofficial add-on; signed-in features such as subscriptions and watch history sync are not included yet.</description>
+        <platform>all</platform>
+        <license>GPL-2.0-only</license>
+        <source>https://github.com/primez-x/plugin.video.smarttube</source>
+        <assets>
+            <icon>resources/media/icon.png</icon>
+        </assets>
+        <news>v0.1.0
+- First release: no-API-key search, home feed, channel and playlist browsing and playback.
+- SponsorBlock segment skipping and DeArrow titles/thumbnails.
+- Accepts the old YouTube add-on search/play URL shapes, so skin and TMDb Helper links repoint by add-on id.
+        </news>
+    </extension>
+</addon>
