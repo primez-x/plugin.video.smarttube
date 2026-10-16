@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import struct
 import unittest
 from xml.etree import ElementTree
 
@@ -38,6 +39,13 @@ class AddonXmlTests(unittest.TestCase):
         news = self.addon.findtext('extension/news') or ''
         self.assertTrue(news.strip().splitlines()[0].endswith(version),
                         'first news line must name %s' % version)
+
+    def test_icon_is_square_512_png(self):
+        icon_path = ROOT / self.addon.findtext('extension/assets/icon')
+        data = icon_path.read_bytes()
+        self.assertTrue(data.startswith(b'\x89PNG\r\n\x1a\n'))
+        width, height = struct.unpack('>II', data[16:24])
+        self.assertEqual((512, 512), (width, height))
 
 
 class SettingsSchemaTests(unittest.TestCase):

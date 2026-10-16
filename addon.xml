@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.smarttube" name="SmartTube" version="0.1.0" provider-name="primez-x">
+<addon id="plugin.video.smarttube" name="SmartTube" version="0.1.1" provider-name="primez-x">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="inputstream.adaptive" version="19.0.0"/>
@@ -17,7 +17,10 @@
         <assets>
             <icon>resources/media/icon.png</icon>
         </assets>
-        <news>v0.1.0
+        <news>v0.1.1
+- Use a familiar red play-button icon instead of the placeholder artwork.
+
+v0.1.0
 - First release: no-API-key search, home feed, channel and playlist browsing and playback.
 - SponsorBlock segment skipping and DeArrow titles/thumbnails.
 - Accepts the old YouTube add-on search/play URL shapes, so skin and TMDb Helper links repoint by add-on id.
