@@ -251,6 +251,37 @@ def _video_item(renderer):
     }
 
 
+def _lockup_video_item(model):
+    """Normalize current channel cards through the shared video parser."""
+    if model.get('contentType') != 'LOCKUP_CONTENT_TYPE_VIDEO':
+        return None
+    metadata = (model.get('metadata') or {}).get('lockupMetadataViewModel') or {}
+    thumbnail = (model.get('contentImage') or {}).get('thumbnailViewModel') or {}
+    badges = [value for key, value in _walk(thumbnail.get('overlays') or [])
+              if key == 'thumbnailBadgeViewModel']
+    parts = [part for row in ((metadata.get('metadata') or {})
+             .get('contentMetadataViewModel') or {}).get('metadataRows', [])
+             for part in row.get('metadataParts', [])]
+    byline = next(({'runs': [{'text': (part.get('text') or {}).get('content', ''),
+                             'navigationEndpoint': {'browseEndpoint': endpoint}}]}
+                   for part in parts for key, endpoint in _walk(part)
+                   if key == 'browseEndpoint' and endpoint.get('browseId', '').startswith('UC')), {})
+    duration = next((badge.get('text', '') for badge in badges
+                     if badge.get('badgeStyle') == 'THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT'), '')
+    return _video_item({
+        'videoId': model.get('contentId'),
+        'title': {'simpleText': (metadata.get('title') or {}).get('content', '')},
+        'thumbnail': {'thumbnails': (thumbnail.get('image') or {}).get('sources', [])},
+        'shortBylineText': byline,
+        'lengthText': {'simpleText': duration},
+        'viewCountText': {'simpleText': ' · '.join(
+            (part.get('text') or {}).get('content', '') for part in parts)},
+        'thumbnailOverlays': [{'thumbnailOverlayTimeStatusRenderer': {'style': 'LIVE'}}]
+            if any(badge.get('badgeStyle') == 'THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE'
+                   for badge in badges) else [],
+    })
+
+
 def _channel_item(renderer):
     channel_id = renderer.get('channelId')
     if not channel_id:
@@ -292,6 +323,7 @@ def _playlist_item(renderer):
 
 
 _RENDERER_PARSERS = {
+    'lockupViewModel': _lockup_video_item,
     'videoRenderer': _video_item,
     'compactVideoRenderer': _video_item,
     'gridVideoRenderer': _video_item,

@@ -107,6 +107,28 @@ class LiveTests(unittest.TestCase):
                          [v['id'] for v in items if v['is_live']])
         self.assertEqual(CHANNEL, items[0]['channel_id'])
 
+    def test_channel_lockup_video_models_preserve_live_flags_and_art(self):
+        model = {
+            'contentId': 'stream00001', 'contentType': 'LOCKUP_CONTENT_TYPE_VIDEO',
+            'metadata': {'lockupMetadataViewModel': {'title': {'content': 'Orbit live'},
+                'metadata': {'contentMetadataViewModel': {'metadataRows': [
+                    {'metadataParts': [{'text': {'content': '123 watching'}}]}]}}}},
+            'contentImage': {'thumbnailViewModel': {
+                'image': {'sources': [{'url':'https://example.com/live.jpg', 'width':720}]},
+                'overlays': [{'thumbnailBottomOverlayViewModel': {'badges': [
+                    {'thumbnailBadgeViewModel': {'text':'LIVE',
+                        'badgeStyle':'THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE'}}]}}]}}}
+        rows, _ = innertube.parse_listing_response({'contents':[{'lockupViewModel':model}]})
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0]['id'], rows[0]['title'], rows[0]['is_live'], rows[0]['thumbnail']),
+                         ('stream00001', 'Orbit live', True, 'https://example.com/live.jpg'))
+        model['contentImage']['thumbnailViewModel']['overlays'] = []
+        rows, _ = innertube.parse_listing_response({'lockupViewModel':model})
+        self.assertFalse(rows[0]['is_live'])
+        model['contentType'] = 'LOCKUP_CONTENT_TYPE_PLAYLIST'
+        self.assertEqual(innertube.parse_listing_response({'lockupViewModel':model})[0], [])
+        self.assertEqual(innertube.parse_listing_response({'lockupViewModel':{}})[0], [])
+
     def test_channel_ids_deduplicate_and_validate(self):
         self.assertEqual([CHANNEL, OTHER], innertube.channel_ids(
             CHANNEL + ', ' + OTHER + '\n' + CHANNEL))
