@@ -1,0 +1,168 @@
+{
+  "_fixture": {
+    "recorded": "2026-10-17",
+    "transport": "Existing anonymous InnerTube WEB search",
+    "sanitized": "IDs, titles, authors, artwork, badge labels and event dates replaced. Renderer flags and duration shapes retained.",
+    "query": "NASA live"
+  },
+  "contents": [
+    {
+      "videoRenderer": {
+        "videoId": "record00011",
+        "title": {
+          "simpleText": "Space live"
+        },
+        "ownerText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "longBylineText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "shortBylineText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "ownerBadges": [
+          {
+            "metadataBadgeRenderer": {
+              "style": "BADGE_STYLE_TYPE_VERIFIED"
+            }
+          }
+        ],
+        "badges": [
+          {
+            "metadataBadgeRenderer": {
+              "style": "BADGE_STYLE_TYPE_LIVE_NOW"
+            }
+          },
+          {
+            "metadataBadgeRenderer": {
+              "style": "BADGE_STYLE_TYPE_SIMPLE"
+            }
+          }
+        ],
+        "thumbnailOverlays": [],
+        "thumbnail": {
+          "thumbnails": [
+            {
+              "url": "https://example.test/recorded.jpg",
+              "width": 480
+            }
+          ]
+        }
+      }
+    },
+    {
+      "videoRenderer": {
+        "videoId": "record00000",
+        "title": {
+          "simpleText": "Space live"
+        },
+        "ownerText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "longBylineText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "shortBylineText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "ownerBadges": [
+          {
+            "metadataBadgeRenderer": {
+              "style": "BADGE_STYLE_TYPE_VERIFIED"
+            }
+          }
+        ],
+        "badges": [
+          {
+            "metadataBadgeRenderer": {
+              "style": "BADGE_STYLE_TYPE_SIMPLE"
+            }
+          },
+          {
+            "metadataBadgeRenderer": {
+              "style": "BADGE_STYLE_TYPE_SIMPLE"
+            }
+          }
+        ],
+        "thumbnailOverlays": [
+          {
+            "thumbnailOverlayTimeStatusRenderer": {
+              "style": "DEFAULT"
+            }
+          }
+        ],
+        "lengthText": {
+          "accessibility": {
+            "accessibilityData": {
+              "label": "39 minutes, 56 seconds"
+            }
+          },
+          "simpleText": "39:56"
+        },
+        "thumbnail": {
+          "thumbnails": [
+            {
+              "url": "https://example.test/recorded.jpg",
+              "width": 480
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

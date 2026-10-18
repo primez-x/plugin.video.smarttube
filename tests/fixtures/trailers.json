@@ -1,0 +1,201 @@
+{
+  "contents": {
+    "sectionListRenderer": {
+      "contents": [
+        {
+          "videoRenderer": {
+            "videoId": "official001",
+            "title": {
+              "simpleText": "Orbit (2026) | Official Trailer"
+            },
+            "ownerText": {
+              "runs": [
+                {
+                  "text": "Universal Pictures",
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  }
+                }
+              ]
+            },
+            "thumbnail": {
+              "thumbnails": [
+                {
+                  "url": "https://example.test/thumb.jpg",
+                  "width": 480
+                }
+              ]
+            },
+            "lengthText": {
+              "simpleText": "2:30"
+            },
+            "ownerBadges": [
+              {
+                "metadataBadgeRenderer": {
+                  "style": "BADGE_STYLE_TYPE_VERIFIED"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "videoRenderer": {
+            "videoId": "reupload001",
+            "title": {
+              "simpleText": "Orbit (2026) Official Trailer"
+            },
+            "ownerText": {
+              "runs": [
+                {
+                  "text": "Trailer Archive",
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  }
+                }
+              ]
+            },
+            "thumbnail": {
+              "thumbnails": [
+                {
+                  "url": "https://example.test/thumb.jpg",
+                  "width": 480
+                }
+              ]
+            },
+            "lengthText": {
+              "simpleText": "2:30"
+            }
+          }
+        },
+        {
+          "videoRenderer": {
+            "videoId": "reaction001",
+            "title": {
+              "simpleText": "Orbit (2026) Official Trailer Reaction"
+            },
+            "ownerText": {
+              "runs": [
+                {
+                  "text": "Reaction Channel",
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  }
+                }
+              ]
+            },
+            "thumbnail": {
+              "thumbnails": [
+                {
+                  "url": "https://example.test/thumb.jpg",
+                  "width": 480
+                }
+              ]
+            },
+            "lengthText": {
+              "simpleText": "2:30"
+            }
+          }
+        },
+        {
+          "videoRenderer": {
+            "videoId": "wrongyear01",
+            "title": {
+              "simpleText": "Orbit (1999) Official Trailer"
+            },
+            "ownerText": {
+              "runs": [
+                {
+                  "text": "Universal Pictures",
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  }
+                }
+              ]
+            },
+            "thumbnail": {
+              "thumbnails": [
+                {
+                  "url": "https://example.test/thumb.jpg",
+                  "width": 480
+                }
+              ]
+            },
+            "lengthText": {
+              "simpleText": "2:30"
+            }
+          }
+        },
+        {
+          "videoRenderer": {
+            "videoId": "fanedit0001",
+            "title": {
+              "simpleText": "Orbit (2026) Fan Made Trailer"
+            },
+            "ownerText": {
+              "runs": [
+                {
+                  "text": "Fan Channel",
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  }
+                }
+              ]
+            },
+            "thumbnail": {
+              "thumbnails": [
+                {
+                  "url": "https://example.test/thumb.jpg",
+                  "width": 480
+                }
+              ]
+            },
+            "lengthText": {
+              "simpleText": "2:30"
+            }
+          }
+        },
+        {
+          "videoRenderer": {
+            "videoId": "unrelated01",
+            "title": {
+              "simpleText": "Other Film (2026) Official Trailer"
+            },
+            "ownerText": {
+              "runs": [
+                {
+                  "text": "Universal Pictures",
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  }
+                }
+              ]
+            },
+            "thumbnail": {
+              "thumbnails": [
+                {
+                  "url": "https://example.test/thumb.jpg",
+                  "width": 480
+                }
+              ]
+            },
+            "lengthText": {
+              "simpleText": "2:30"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

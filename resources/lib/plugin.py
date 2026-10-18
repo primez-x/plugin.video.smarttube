@@ -10,7 +10,7 @@
 """
 
 import sys
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import xbmc
 import xbmcaddon
@@ -27,7 +27,6 @@ import innertube  # noqa: E402
 import routes  # noqa: E402
 
 CHANNEL_VIDEOS_PARAMS = 'EgZ2aWRlb3M%3D'
-CHANNEL_STREAMS_PARAMS = 'EgdzdHJlYW1z8gYECgJ6AA%3D%3D'
 
 
 def _log(message, level=xbmc.LOGINFO):
@@ -55,7 +54,10 @@ def _locale():
 
 def _add_item(handle, base, item):
     if item['type'] == 'video':
-        url = routes.build_url(base, 'play', video_id=item['id'])
+        if item.get('is_live') and item.get('channel_id'):
+            url = routes.build_url(base, 'play', channel_id=item['channel_id'], live=1)
+        else:
+            url = routes.build_url(base, 'play', video_id=item['id'])
         is_folder = False
     elif item['type'] == 'channel':
         url = routes.build_url(base, 'channel/' + item['id'])
@@ -66,7 +68,9 @@ def _add_item(handle, base, item):
     list_item = xbmcgui.ListItem(label=item.get('title') or item['id'])
     if item.get('thumbnail'):
         list_item.setArt({'thumb': item['thumbnail'],
-                          'icon': item['thumbnail']})
+                          'icon': item['thumbnail'],
+                          'landscape': item['thumbnail'],
+                          'fanart': item['thumbnail']})
     info = list_item.getVideoInfoTag()
     info.setTitle(item.get('title') or item['id'])
     if item.get('author'):
@@ -77,13 +81,26 @@ def _add_item(handle, base, item):
         info.setPlot(' • '.join(plot_parts))
     if item.get('duration'):
         info.setDuration(item['duration'])
+    list_item.setProperty('Starlight.Source', 'YouTube')
+    list_item.setProperty('IsLive', 'true' if item.get('is_live') else 'false')
+    list_item.setProperty('Starlight.IsLive', 'true' if item.get('is_live') else 'false')
     list_item.setProperty('IsPlayable', 'false' if is_folder else 'true')
+    channel_id = item['id'] if item['type'] == 'channel' else item.get('channel_id')
+    if channel_id:
+        list_item.setProperty('SmartTube.ChannelId', channel_id)
+        followed = (ADDON.getSetting('followed_channels') or '').replace(',', ' ').split()
+        label = ADDON.getLocalizedString(32018 if channel_id in followed else 32017)
+        list_item.addContextMenuItems([(label, 'RunPlugin(%s)' % routes.build_url(
+            base, 'follow', channel_id=channel_id))])
     xbmcplugin.addDirectoryItem(handle, url, list_item, is_folder)
 
 
-def _finish_listing(handle):
+def _finish_listing(handle, succeeded=True):
     xbmcplugin.setContent(handle, 'videos')
-    xbmcplugin.endOfDirectory(handle)
+    if succeeded:
+        xbmcplugin.endOfDirectory(handle)
+    else:
+        xbmcplugin.endOfDirectory(handle, succeeded=False)
 
 
 def _show_items(handle, base, items, continuation, route):
@@ -114,6 +131,7 @@ def _home(handle, base):
     entries = (
         (32010, routes.build_url(base, 'search')),
         (32011, routes.build_url(base, 'browse/FEwhat_to_watch')),
+        (32016, routes.build_url(base, 'live_now')),
     )
     for string_id, url in entries:
         xbmcplugin.addDirectoryItem(
@@ -143,6 +161,9 @@ def _resolve_play(handle, video_id):
     # The SponsorBlock service reads this to know what is playing.
     xbmcgui.Window(10000).setProperty('SmartTube.VideoId', video_id)
     list_item = xbmcgui.ListItem(path=url)
+    list_item.setProperty('Starlight.Source', 'YouTube')
+    list_item.setProperty('IsLive', 'true' if info.get('is_live') else 'false')
+    list_item.setProperty('Starlight.IsLive', 'true' if info.get('is_live') else 'false')
     video_info = list_item.getVideoInfoTag()
     video_info.setTitle(info.get('title') or video_id)
     if info.get('author'):
@@ -175,16 +196,9 @@ def _resolve_play(handle, video_id):
 
 def _play_channel_live(handle, channel_id):
     language, region = _locale()
-    try:
-        items, _unused = innertube.browse(
-            channel_id, params=CHANNEL_STREAMS_PARAMS,
-            hl=language, gl=region)
-    except Exception as exc:  # Network errors surface as a clean failure.
-        _log('Live lookup failed for %s: %s' % (channel_id, exc),
-             xbmc.LOGWARNING)
-        items = []
-    live = [item for item in items
-            if item['type'] == 'video' and item.get('is_live')]
+    live, failures = innertube.live_now([channel_id], hl=language, gl=region)
+    if failures:
+        _log('Live channel lookup failed', xbmc.LOGWARNING)
     if not live:
         _notify(ADDON.getLocalizedString(32013))
         xbmcplugin.setResolvedUrl(
@@ -193,17 +207,69 @@ def _play_channel_live(handle, channel_id):
     _resolve_play(handle, live[0]['id'])
 
 
+def _trailer(handle, base, route):
+    language, region = _locale()
+    items = innertube.find_trailers(
+        route.title, route.year, route.media_type, hl=language, gl=region)
+    if route.mode == 'lookup':
+        # Preserve the original title and art used by the trailer rank.
+        for item in items:
+            _add_item(handle, base, item)
+        _finish_listing(handle)
+    elif items:
+        _resolve_play(handle, items[0]['id'])
+    else:
+        _notify(ADDON.getLocalizedString(32019))
+        xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem(path=''))
+
+
+def _live_now(handle, base, route):
+    channels = innertube.channel_ids(ADDON.getSetting('followed_channels') or '')
+    channels = innertube.channel_ids(channels + innertube.channel_ids(route.channel_ids))
+    language, region = _locale()
+    items, failures = innertube.live_now(channels, hl=language, gl=region)
+    for item in items:
+        _add_item(handle, base, item)
+    if failures:
+        _notify(ADDON.getLocalizedString(32023))
+    xbmcplugin.setContent(handle, 'videos')
+    if failures and len(failures) == len(channels):
+        xbmcplugin.endOfDirectory(handle, succeeded=False)
+    else:
+        xbmcplugin.endOfDirectory(handle)
+
+
+def _follow(channel_id):
+    requested = innertube.channel_ids([channel_id])
+    if not requested:
+        raise ValueError('A channel ID is required')
+    channels = innertube.channel_ids(ADDON.getSetting('followed_channels') or '')
+    if channel_id in channels:
+        channels.remove(channel_id)
+    else:
+        channels = innertube.channel_ids(channels + requested)
+    ADDON.setSetting('followed_channels', ','.join(channels))
+    xbmc.executebuiltin('Container.Refresh')
+
+
 def main(argv=None):
     argv = argv if argv is not None else sys.argv
     base = argv[0]
     handle = int(argv[1]) if len(argv) > 1 else -1
     query_string = argv[2][1:] if len(argv) > 2 else ''
     path = urlparse(base).path
-    route = routes.parse_route(path, query_string)
-    language, region = _locale()
+    route = None
     try:
+        route = routes.parse_route(path, query_string)
+        language, region = _locale()
         if route.action == 'home':
             _home(handle, base)
+        elif route.action == 'trailer':
+            _trailer(handle, base, route)
+        elif route.action == 'live_now':
+            _live_now(handle, base, route)
+        elif route.action == 'follow':
+            _follow(route.channel_id)
         elif route.action == 'search':
             if not route.query and not route.continuation:
                 query = xbmcgui.Dialog().input(
@@ -252,11 +318,14 @@ def main(argv=None):
     except Exception as exc:  # Never leave Kodi spinning on an error.
         _log('Failed %s: %s' % (route, exc), xbmc.LOGERROR)
         _notify(str(exc))
-        if route.action in ('play', 'play_channel'):
+        if (route and (route.action in ('play', 'play_channel')
+                       or (route.action == 'trailer' and route.mode == 'play'))) or (
+                route is None and path.strip('/') == 'trailer'
+                and parse_qs(query_string).get('mode') != ['lookup']):
             xbmcplugin.setResolvedUrl(
                 handle, False, xbmcgui.ListItem(path=''))
-        else:
-            _finish_listing(handle)
+        elif not route or route.action != 'follow':
+            _finish_listing(handle, succeeded=False)
 
 
 if __name__ == '__main__':

@@ -2,9 +2,7 @@
 """
     SmartTube for Kodi - plugin URL routing.
 
-    Accepts SmartTube's own URLs plus the plugin.video.youtube shapes that
-    Arctic Fuse 3 and TMDb Helper emit today, so repointing those add-ons is
-    a plain add-on-id substitution:
+    Accepts SmartTube URLs for Starlight and the standard YouTube URL shapes:
       plugin://plugin.video.smarttube/search/?q=<QUERY>
       plugin://plugin.video.smarttube/kodion/search/query/?q=<QUERY>
       plugin://plugin.video.smarttube/play/?video_id=<VIDEO_ID>
@@ -14,12 +12,15 @@
     SPDX-License-Identifier: GPL-2.0-only
 """
 
-from urllib.parse import parse_qs, quote, urlencode
+import re
+from urllib.parse import parse_qs, quote, urlencode, urlsplit
 
 
 class Route(object):
     def __init__(self, action='home', query='', video_id='', playlist_id='',
-                 channel_id='', browse_id='', continuation='', live=False):
+                 channel_id='', browse_id='', continuation='', live=False,
+                 title='', year='', imdb='', tmdb='', media_type='',
+                 mode='play', channel_ids=''):
         self.action = action
         self.query = query
         self.video_id = video_id
@@ -28,6 +29,13 @@ class Route(object):
         self.browse_id = browse_id
         self.continuation = continuation
         self.live = live
+        self.title = title
+        self.year = year
+        self.imdb = imdb
+        self.tmdb = tmdb
+        self.media_type = media_type
+        self.mode = mode
+        self.channel_ids = channel_ids
 
     def __repr__(self):
         return ('Route(action=%r, query=%r, video_id=%r, playlist_id=%r, '
@@ -59,7 +67,24 @@ def parse_route(path, query_string=''):
     continuation = _first(params, 'continuation', 'ctoken')
     browse_id = _first(params, 'browse_id', 'browseId')
     live = _first(params, 'live') not in ('', '0', 'false', 'False')
-    # plugin.video.youtube play URLs for a channel's live stream.
+    if parts[:1] == ['trailer']:
+        title = _first(params, 'title').strip()
+        year = _first(params, 'year')
+        media_type = _first(params, 'media_type')
+        mode = _first(params, 'mode') or 'play'
+        if not title or len(title) > 200 or not re.fullmatch(r'[12][0-9]{3}', year):
+            raise ValueError('Trailer requires a title and a four-digit year')
+        if media_type not in ('', 'movie', 'tv') or mode not in ('play', 'lookup'):
+            raise ValueError('Invalid trailer media type or mode')
+        return Route('trailer', title=title, year=year,
+                     imdb=_first(params, 'imdb', 'imdb_id'),
+                     tmdb=_first(params, 'tmdb', 'tmdb_id'),
+                     media_type=media_type, mode=mode)
+    if parts[:1] == ['live_now']:
+        return Route('live_now', channel_ids=_first(params, 'channel_ids'))
+    if parts[:1] == ['follow']:
+        return Route('follow', channel_id=channel_id)
+    # Standard YouTube play URLs for a channel's live stream.
     if parts[:1] == ['play'] and channel_id and not video_id:
         return Route('play_channel', channel_id=channel_id, live=True)
     if parts[:1] == ['play']:
@@ -96,7 +121,8 @@ def parse_route(path, query_string=''):
 
 def build_url(base, path='', **params):
     """Build a plugin:// URL from the Kodi-provided base handle URL."""
-    url = base.rstrip('/')
+    parsed = urlsplit(base)
+    url = '%s://%s' % (parsed.scheme, parsed.netloc)
     if path:
         url += '/' + '/'.join(quote(part, safe='')
                               for part in path.strip('/').split('/')

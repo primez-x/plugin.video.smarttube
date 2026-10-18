@@ -9,9 +9,9 @@ import routes  # noqa: E402
 
 
 class YoutubeCompatRouteTests(unittest.TestCase):
-    """URL shapes emitted today by Arctic Fuse 3 and TMDb Helper."""
+    """Standard YouTube URL shapes accepted by Starlight."""
 
-    def test_tmdb_helper_search(self):
+    def test_starlight_search(self):
         route = routes.parse_route('/search/', 'q=Some%20Movie&search_type=notvalid')
         self.assertEqual('search', route.action)
         self.assertEqual('Some Movie', route.query)

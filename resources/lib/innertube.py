@@ -11,6 +11,8 @@
 """
 
 import json
+import re
+import unicodedata
 import urllib.error
 import urllib.request
 
@@ -105,6 +107,7 @@ CLIENTS = {
 # for signed-out playback (testsuite clients, then VR).
 PLAYER_CLIENT_ORDER = ('android_testsuite', 'ios_testsuite', 'android_vr')
 LISTING_CLIENT = 'web'
+CHANNEL_STREAMS_PARAMS = 'EgdzdHJlYW1z8gYECgJ6AA%3D%3D'
 
 
 class InnertubeError(Exception):
@@ -211,9 +214,24 @@ def _video_item(renderer):
     badges = renderer.get('badges') or []
     is_live = any(
         ((badge.get('metadataBadgeRenderer') or {}).get('style') or '')
-        .endswith('LIVE') for badge in badges if isinstance(badge, dict))
-    if renderer.get('isUpcoming') or renderer.get('upcomingEventData'):
-        is_live = True
+        in ('BADGE_STYLE_TYPE_LIVE_NOW', 'BADGE_STYLE_TYPE_LIVE')
+        for badge in badges if isinstance(badge, dict))
+    overlays = renderer.get('thumbnailOverlays') or []
+    is_live = is_live or any(
+        (overlay.get('thumbnailOverlayTimeStatusRenderer') or {}).get('style') == 'LIVE'
+        for overlay in overlays if isinstance(overlay, dict))
+    is_upcoming = bool(renderer.get('isUpcoming') or renderer.get('upcomingEventData'))
+    byline = (renderer.get('ownerText') or renderer.get('longBylineText')
+              or renderer.get('shortBylineText') or {})
+    channel_id = next((
+        ((run.get('navigationEndpoint') or {}).get('browseEndpoint') or {}).get('browseId')
+        for run in byline.get('runs', [])
+        if ((run.get('navigationEndpoint') or {}).get('browseEndpoint') or {}).get('browseId')
+    ), '')
+    verified = any(
+        ((badge.get('metadataBadgeRenderer') or {}).get('style') or '')
+        in ('BADGE_STYLE_TYPE_VERIFIED', 'BADGE_STYLE_TYPE_VERIFIED_ARTIST')
+        for badge in renderer.get('ownerBadges') or [] if isinstance(badge, dict))
     return {
         'type': 'video',
         'id': video_id,
@@ -226,7 +244,10 @@ def _video_item(renderer):
         'views': parse_text(renderer.get('viewCountText') or {}),
         'published': parse_text(renderer.get('publishedTimeText') or {}),
         'thumbnail': _thumbnail_url(renderer),
-        'is_live': is_live,
+        'is_live': is_live and not is_upcoming,
+        'is_upcoming': is_upcoming,
+        'channel_id': channel_id,
+        'author_verified': verified,
     }
 
 
@@ -429,3 +450,112 @@ def get_playback(video_id, hl='en', gl='US', opener=None,
     if last_info is None:
         raise InnertubeError('Player request failed for %s' % video_id)
     return last_info, last_client
+
+
+def _words(text):
+    text = unicodedata.normalize('NFKD', text.casefold())
+    return ' '.join(re.findall(r'[^\W_]+', ''.join(
+        char for char in text if not unicodedata.combining(char))))
+
+
+# Channel names are a preference signal, never proof of uploader identity.
+_OFFICIAL_CHANNELS = frozenset((
+    'universal pictures', 'warner bros', 'warner bros pictures',
+    'sony pictures entertainment', 'paramount pictures', 'walt disney studios',
+    'marvel entertainment', 'pixar', '20th century studios', 'netflix',
+    'prime video', 'apple tv', 'hbo', 'max', 'a24', 'lionsgate',
+    'searchlight pictures', 'focus features', 'neon', 'lucasfilm', 'star wars'))
+
+
+def rank_trailers(items, title, year, media_type=''):
+    """Rank title-matched trailers; reject wrong years and unofficial edit types."""
+    title = _words(title)
+    if not title:
+        return []
+    ranked = {}
+    for item in items:
+        if (item.get('type') != 'video' or not item.get('id')
+                or item.get('is_live') or item.get('is_upcoming')):
+            continue
+        text = _words(item.get('title', ''))
+        if (' ' + title + ' ') not in (' ' + text + ' '):
+            continue
+        # Exclude words in the media title before classifying the trailer label.
+        label = text.replace(title, '', 1)
+        if not re.search(r'\btrailer\b', label):
+            continue
+        if re.search(r'\b(reactions?|reviews?|fan|fanmade|concept|parody|'
+                     r'breakdown|explained|edits?|mashup|recap|gameplay)\b', label):
+            continue
+        years = re.findall(r'\b[12][0-9]{3}\b', label)
+        if years and str(year) not in years:
+            continue
+        author = _words(item.get('author', ''))
+        score = 100 if str(year) in years else 0
+        score += 60 if author in _OFFICIAL_CHANNELS else 0
+        score += 20 if item.get('author_verified') else 0
+        score += 40 if 'official trailer' in label else 0
+        score += 10 if re.search(r'\bofficial\b', label) else 0
+        score += 5 if 30 <= item.get('duration', 0) <= 360 else 0
+        if media_type == 'tv':
+            score += 10 if re.search(r'\b(series|season|tv)\b', label) else 0
+        elif media_type == 'movie':
+            score -= 30 if re.search(r'\b(series|season|tv)\b', label) else 0
+        previous = ranked.get(item['id'])
+        if previous is None or score > previous[0]:
+            ranked[item['id']] = (score, item)
+    return [entry[1] for entry in sorted(
+        ranked.values(), key=lambda entry: (-entry[0], entry[1]['id']))]
+
+
+def find_trailers(title, year, media_type='', hl='en', gl='US', opener=None):
+    """Search one public result page and return deterministic trailer candidates."""
+    query = ' '.join(part for part in (
+        title, str(year), 'series' if media_type == 'tv' else media_type,
+        'official trailer') if part)
+    items, _ = search(query, hl=hl, gl=gl, opener=opener)
+    return rank_trailers(items, title, year, media_type)
+
+
+def channel_ids(value):
+    """Validate up to 25 unique public channel IDs from a list or text."""
+    values = re.split(r'[,\s]+', value.strip()) if isinstance(value, str) else value
+    result = []
+    for channel_id in values:
+        if not channel_id:
+            continue
+        if not re.fullmatch(r'UC[A-Za-z0-9_-]{22}', channel_id):
+            raise ValueError('Use public YouTube channel IDs (UC plus 22 characters)')
+        if channel_id not in result:
+            result.append(channel_id)
+    if len(result) > 25:
+        raise ValueError('Live now supports up to 25 channels per request')
+    return result
+
+
+def live_now(channels, hl='en', gl='US', opener=None):
+    """Return one current stream per channel plus IDs whose browse request failed."""
+    items = []
+    failures = []
+    for channel_id in channel_ids(channels):
+        continuation = ''
+        seen = set()
+        try:
+            for _ in range(3):
+                page, token = browse(
+                    channel_id, params=CHANNEL_STREAMS_PARAMS,
+                    continuation=continuation, hl=hl, gl=gl, opener=opener)
+                current = sorted((item for item in page
+                                  if item['type'] == 'video' and item.get('is_live')),
+                                 key=lambda item: item['id'])
+                if current:
+                    items.append(dict(current[0], channel_id=channel_id))
+                    break
+                if not token or token in seen:
+                    break
+                seen.add(token)
+                continuation = token
+        except (InnertubeError, OSError, ValueError):
+            failures.append(channel_id)
+    return sorted(items, key=lambda item: (
+        item.get('author', '').casefold(), item['channel_id'])), failures

@@ -86,3 +86,31 @@ msgstr ""
 msgctxt "#32045"
 msgid "Notify when a segment is skipped"
 msgstr ""
+
+msgctxt "#32016"
+msgid "Live now"
+msgstr ""
+
+msgctxt "#32017"
+msgid "Follow channel"
+msgstr ""
+
+msgctxt "#32018"
+msgid "Unfollow channel"
+msgstr ""
+
+msgctxt "#32019"
+msgid "No matching trailer found"
+msgstr ""
+
+msgctxt "#32022"
+msgid "Followed channel IDs"
+msgstr ""
+
+msgctxt "#32023"
+msgid "Some live channels could not be checked"
+msgstr ""
+
+msgctxt "#32024"
+msgid "Follow channels from the context menu, or enter comma-separated YouTube channel IDs. Live now checks up to 25 channels."
+msgstr ""

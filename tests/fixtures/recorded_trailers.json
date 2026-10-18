@@ -1,0 +1,253 @@
+{
+  "_fixture": {
+    "recorded": "2026-10-17",
+    "transport": "Existing anonymous InnerTube WEB search",
+    "sanitized": "IDs, titles, authors, artwork, badge labels and event dates replaced. Renderer flags and duration shapes retained.",
+    "query": "Dune 2021 official trailer"
+  },
+  "contents": [
+    {
+      "videoRenderer": {
+        "videoId": "record00000",
+        "title": {
+          "simpleText": "Orbit 2026 Official Trailer"
+        },
+        "ownerText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "longBylineText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "shortBylineText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "ownerBadges": [
+          {
+            "metadataBadgeRenderer": {
+              "style": "BADGE_STYLE_TYPE_VERIFIED"
+            }
+          }
+        ],
+        "badges": [
+          {
+            "metadataBadgeRenderer": {
+              "style": "BADGE_STYLE_TYPE_SIMPLE"
+            }
+          }
+        ],
+        "thumbnailOverlays": [
+          {
+            "thumbnailOverlayTimeStatusRenderer": {
+              "style": "DEFAULT"
+            }
+          }
+        ],
+        "lengthText": {
+          "accessibility": {
+            "accessibilityData": {
+              "label": "3 minutes, 5 seconds"
+            }
+          },
+          "simpleText": "3:05"
+        },
+        "thumbnail": {
+          "thumbnails": [
+            {
+              "url": "https://example.test/recorded.jpg",
+              "width": 480
+            }
+          ]
+        }
+      }
+    },
+    {
+      "videoRenderer": {
+        "videoId": "record00001",
+        "title": {
+          "simpleText": "Orbit 2026 Official Trailer"
+        },
+        "ownerText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "longBylineText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "shortBylineText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "ownerBadges": [
+          {
+            "metadataBadgeRenderer": {
+              "style": "BADGE_STYLE_TYPE_VERIFIED"
+            }
+          }
+        ],
+        "badges": [
+          {
+            "metadataBadgeRenderer": {
+              "style": "BADGE_STYLE_TYPE_SIMPLE"
+            }
+          }
+        ],
+        "thumbnailOverlays": [
+          {
+            "thumbnailOverlayTimeStatusRenderer": {
+              "style": "DEFAULT"
+            }
+          }
+        ],
+        "lengthText": {
+          "accessibility": {
+            "accessibilityData": {
+              "label": "3 minutes, 28 seconds"
+            }
+          },
+          "simpleText": "3:28"
+        },
+        "thumbnail": {
+          "thumbnails": [
+            {
+              "url": "https://example.test/recorded.jpg",
+              "width": 480
+            }
+          ]
+        }
+      }
+    },
+    {
+      "videoRenderer": {
+        "videoId": "record00002",
+        "title": {
+          "simpleText": "Orbit 2026 Official Trailer"
+        },
+        "ownerText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "longBylineText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "shortBylineText": {
+          "runs": [
+            {
+              "text": "Fixture Channel",
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          ]
+        },
+        "ownerBadges": [
+          {
+            "metadataBadgeRenderer": {
+              "style": "BADGE_STYLE_TYPE_VERIFIED"
+            }
+          }
+        ],
+        "badges": [
+          {
+            "metadataBadgeRenderer": {
+              "style": "BADGE_STYLE_TYPE_SIMPLE"
+            }
+          }
+        ],
+        "thumbnailOverlays": [
+          {
+            "thumbnailOverlayTimeStatusRenderer": {
+              "style": "DEFAULT"
+            }
+          }
+        ],
+        "lengthText": {
+          "accessibility": {
+            "accessibilityData": {
+              "label": "2 minutes, 25 seconds"
+            }
+          },
+          "simpleText": "2:25"
+        },
+        "thumbnail": {
+          "thumbnails": [
+            {
+              "url": "https://example.test/recorded.jpg",
+              "width": 480
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

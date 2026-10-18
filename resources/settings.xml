@@ -23,6 +23,12 @@
                         <heading>32021</heading>
                     </control>
                 </setting>
+                <setting id="followed_channels" type="string" label="32022" help="32024">
+                    <level>0</level>
+                    <default></default>
+                    <constraints><allowempty>true</allowempty></constraints>
+                    <control type="edit" format="string"><heading>32022</heading></control>
+                </setting>
             </group>
         </category>
         <category id="extras" label="32002" help=""> <!-- Extras -->

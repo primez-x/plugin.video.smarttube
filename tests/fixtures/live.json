@@ -1,0 +1,159 @@
+{
+  "contents": {
+    "sectionListRenderer": {
+      "contents": [
+        {
+          "videoRenderer": {
+            "videoId": "livevideo01",
+            "title": {
+              "simpleText": "Space live"
+            },
+            "ownerText": {
+              "runs": [
+                {
+                  "text": "Space Channel",
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  }
+                }
+              ]
+            },
+            "thumbnail": {
+              "thumbnails": [
+                {
+                  "url": "https://example.test/thumb.jpg",
+                  "width": 480
+                }
+              ]
+            },
+            "lengthText": {
+              "simpleText": "2:30"
+            },
+            "badges": [
+              {
+                "metadataBadgeRenderer": {
+                  "style": "BADGE_STYLE_TYPE_LIVE_NOW"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "videoRenderer": {
+            "videoId": "archived001",
+            "title": {
+              "simpleText": "Space archive"
+            },
+            "ownerText": {
+              "runs": [
+                {
+                  "text": "Channel One",
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  }
+                }
+              ]
+            },
+            "thumbnail": {
+              "thumbnails": [
+                {
+                  "url": "https://example.test/thumb.jpg",
+                  "width": 480
+                }
+              ]
+            },
+            "lengthText": {
+              "simpleText": "2:30"
+            }
+          }
+        },
+        {
+          "videoRenderer": {
+            "videoId": "upcoming001",
+            "title": {
+              "simpleText": "Space tomorrow"
+            },
+            "ownerText": {
+              "runs": [
+                {
+                  "text": "Channel One",
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  }
+                }
+              ]
+            },
+            "thumbnail": {
+              "thumbnails": [
+                {
+                  "url": "https://example.test/thumb.jpg",
+                  "width": 480
+                }
+              ]
+            },
+            "lengthText": {
+              "simpleText": "2:30"
+            },
+            "upcomingEventData": {
+              "startTime": "2000000000"
+            },
+            "badges": [
+              {
+                "metadataBadgeRenderer": {
+                  "style": "BADGE_STYLE_TYPE_LIVE_NOW"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "videoRenderer": {
+            "videoId": "overlay0001",
+            "title": {
+              "simpleText": "Space live two"
+            },
+            "ownerText": {
+              "runs": [
+                {
+                  "text": "Space Channel",
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UCaaaaaaaaaaaaaaaaaaaaaa"
+                    }
+                  }
+                }
+              ]
+            },
+            "thumbnail": {
+              "thumbnails": [
+                {
+                  "url": "https://example.test/thumb.jpg",
+                  "width": 480
+                }
+              ]
+            },
+            "lengthText": {
+              "simpleText": "2:30"
+            },
+            "thumbnailOverlays": [
+              {
+                "thumbnailOverlayTimeStatusRenderer": {
+                  "style": "LIVE",
+                  "text": {
+                    "simpleText": "LIVE"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
