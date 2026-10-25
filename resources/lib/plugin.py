@@ -158,8 +158,10 @@ def _resolve_play(handle, video_id):
             handle, False, xbmcgui.ListItem(path=''))
         return
     _log('Playing %s via %s (%s)' % (video_id, client_name, kind))
-    # The SponsorBlock service reads this to know what is playing.
-    xbmcgui.Window(10000).setProperty('SmartTube.VideoId', video_id)
+    # The SponsorBlock service skips only while Kodi plays this stream.
+    home = xbmcgui.Window(10000)
+    home.setProperty('SmartTube.VideoId', video_id)
+    home.setProperty('SmartTube.StreamUrl', url)
     list_item = xbmcgui.ListItem(path=url)
     list_item.setProperty('Starlight.Source', 'YouTube')
     list_item.setProperty('IsLive', 'true' if info.get('is_live') else 'false')

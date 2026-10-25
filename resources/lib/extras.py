@@ -88,15 +88,35 @@ def fetch_segments(video_id, categories=ALL_CATEGORIES, opener=None):
     return parse_segments(data, video_id)
 
 
-def segment_at(segments, position):
-    """Return the segment containing position (seconds), else None.
+class SegmentSkips(object):
+    """Decide SponsorBlock skips for one playing file.
 
-    A small tolerance past the end avoids re-triggering on the seek target.
+    Each segment skips once. A seek on an adaptive stream resumes at the
+    chunk start before the target, which can still lie inside the segment,
+    so a segment re-arms only after playback leaves the segment.
     """
-    for segment in segments or []:
-        if segment['start'] <= position < segment['end'] - 0.5:
-            return segment
-    return None
+
+    def __init__(self, segments):
+        self._segments = segments or []
+        self._skipped = set()
+
+    def check(self, position):
+        """Return the segment to skip at position (seconds), else None."""
+        target = None
+        for index, segment in enumerate(self._segments):
+            # A small tolerance past the end counts as past the segment.
+            if not segment['start'] <= position < segment['end'] - 0.5:
+                self._skipped.discard(index)
+            elif index not in self._skipped:
+                self._skipped.add(index)
+                if target is None or segment['end'] > target['end']:
+                    target = segment
+        return target
+
+
+def ends_video(segment, total_time):
+    """True when segment runs to the end of a video of total_time seconds."""
+    return total_time > 0 and segment['end'] >= total_time - 1.0
 
 
 def parse_branding(data):

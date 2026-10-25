@@ -34,14 +34,48 @@ class SegmentTests(unittest.TestCase):
         self.assertEqual((0.0, 12.0),
                          (segments[0]['start'], segments[0]['end']))
 
-    def test_segment_at(self):
-        segments = extras.parse_segments(SEGMENTS_RESPONSE, 'vid1')
-        self.assertEqual('intro',
-                         extras.segment_at(segments, 5)['category'])
-        self.assertIsNone(extras.segment_at(segments, 30))
-        # Just before the end counts as past it (avoids seek loops).
-        self.assertIsNone(extras.segment_at(segments, 11.8))
-        self.assertIsNone(extras.segment_at([], 5))
+    def test_skip_once_while_inside(self):
+        skips = extras.SegmentSkips(
+            extras.parse_segments(SEGMENTS_RESPONSE, 'vid1'))
+        self.assertIsNone(skips.check(30))
+        self.assertEqual('intro', skips.check(5)['category'])
+        # An adaptive stream resumes at a chunk start short of the target,
+        # and getTime() can lag the seek; neither may skip again.
+        self.assertIsNone(skips.check(5))
+        self.assertIsNone(skips.check(8))
+        self.assertIsNone(extras.SegmentSkips([]).check(5))
+
+    def test_landing_near_the_end_is_past_it(self):
+        skips = extras.SegmentSkips(
+            extras.parse_segments(SEGMENTS_RESPONSE, 'vid1'))
+        self.assertIsNone(skips.check(11.8))
+
+    def test_rearms_after_leaving(self):
+        skips = extras.SegmentSkips(
+            extras.parse_segments(SEGMENTS_RESPONSE, 'vid1'))
+        self.assertEqual('sponsor', skips.check(61)['category'])
+        self.assertIsNone(skips.check(88))
+        self.assertIsNone(skips.check(91))
+        # The viewer seeks back before the segment and plays into it.
+        self.assertIsNone(skips.check(50))
+        self.assertEqual('sponsor', skips.check(61)['category'])
+
+    def test_overlapping_segments_skip_to_the_furthest_end(self):
+        skips = extras.SegmentSkips([
+            {'category': 'preview', 'start': 0.0, 'end': 6.426, 'uuid': 'p'},
+            {'category': 'intro', 'start': 0.0, 'end': 6.147, 'uuid': 'i'},
+        ])
+        self.assertEqual(6.426, skips.check(0)['end'])
+        self.assertIsNone(skips.check(4.0))
+
+    def test_ends_video(self):
+        # Outro of 8ZYhuvIv1pA: SponsorBlock ends the segment at the duration.
+        outro = {'category': 'outro', 'start': 139.837, 'end': 147.841}
+        self.assertTrue(extras.ends_video(outro, 147.841))
+        self.assertTrue(extras.ends_video(outro, 148.5))
+        self.assertFalse(extras.ends_video(outro, 600))
+        # Unknown duration: seek as usual.
+        self.assertFalse(extras.ends_video(outro, 0))
 
     def test_fetch_uses_hash_prefix(self):
         seen = {}

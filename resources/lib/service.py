@@ -2,9 +2,10 @@
 """
     SmartTube for Kodi - SponsorBlock skip service.
 
-    The plugin resolver stores the playing video id in the Home window
-    property SmartTube.VideoId; this service fetches its SponsorBlock
-    segments once per file and seeks past them during playback.
+    The plugin resolver stores the video id and the stream URL it resolved
+    in the Home window properties SmartTube.VideoId and SmartTube.StreamUrl.
+    This service skips only while Kodi plays that exact stream: it fetches
+    the SponsorBlock segments once per file and seeks past them.
 
     SPDX-License-Identifier: GPL-2.0-only
 """
@@ -38,23 +39,38 @@ def _settings():
     return values
 
 
+def _playing_file(player):
+    try:
+        return player.getPlayingFile() if player.isPlayingVideo() else ''
+    except RuntimeError:
+        return ''
+
+
+def _end_playback(player):
+    """Leave the video as a natural end would: next queued video, else stop."""
+    position = xbmc.getInfoLabel('VideoPlayer.PlaylistPosition')
+    length = xbmc.getInfoLabel('VideoPlayer.PlaylistLength')
+    if position.isdigit() and length.isdigit() and int(position) < int(length):
+        player.playnext()
+    else:
+        player.stop()
+
+
 def main():
     monitor = xbmc.Monitor()
     player = xbmc.Player()
     home = xbmcgui.Window(10000)
     loaded_for = ''
-    segments = []
+    skips = None
     xbmc.log('[%s] SponsorBlock service started' % ADDON_ID, xbmc.LOGINFO)
     while not monitor.abortRequested():
-        try:
-            playing = player.isPlayingVideo()
-        except RuntimeError:
-            playing = False
-        if playing:
+        playing_file = _playing_file(player)
+        if playing_file != loaded_for:
+            loaded_for = playing_file
+            skips = None
             video_id = home.getProperty('SmartTube.VideoId')
-            if video_id and video_id != loaded_for:
-                loaded_for = video_id
-                segments = []
+            if (playing_file and video_id
+                    and playing_file == home.getProperty('SmartTube.StreamUrl')):
                 settings = _settings()
                 categories = extras.categories_for(settings)
                 if categories:
@@ -65,25 +81,27 @@ def main():
                             '[%s] %d SponsorBlock segment(s) for %s'
                             % (ADDON_ID, len(segments), video_id),
                             xbmc.LOGINFO)
+                        skips = extras.SegmentSkips(segments)
                     except Exception as exc:
                         xbmc.log(
                             '[%s] SponsorBlock lookup failed: %s'
                             % (ADDON_ID, exc), xbmc.LOGWARNING)
-            if segments:
-                try:
-                    segment = extras.segment_at(segments, player.getTime())
-                except RuntimeError:
-                    segment = None
-                if segment is not None:
+        if skips is not None:
+            try:
+                segment = skips.check(player.getTime())
+                total_time = player.getTotalTime()
+            except RuntimeError:
+                segment = None
+            if segment is not None:
+                if extras.ends_video(segment, total_time):
+                    _end_playback(player)
+                else:
                     player.seekTime(segment['end'])
-                    if _settings().get('sponsorblock_notify', True):
-                        xbmcgui.Dialog().notification(
-                            ADDON.getAddonInfo('name'),
-                            ADDON.getLocalizedString(32015),
-                            ADDON.getAddonInfo('icon'), 2500)
-        else:
-            loaded_for = ''
-            segments = []
+                if _settings().get('sponsorblock_notify', True):
+                    xbmcgui.Dialog().notification(
+                        ADDON.getAddonInfo('name'),
+                        ADDON.getLocalizedString(32015),
+                        ADDON.getAddonInfo('icon'), 2500)
         if monitor.waitForAbort(1):
             break
     xbmc.log('[%s] SponsorBlock service stopped' % ADDON_ID, xbmc.LOGINFO)

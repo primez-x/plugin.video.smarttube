@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.smarttube" name="SmartTube" version="0.2.0" provider-name="primez-x">
+<addon id="plugin.video.smarttube" name="SmartTube" version="0.2.1" provider-name="primez-x">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="inputstream.adaptive" version="19.0.0"/>
@@ -17,7 +17,11 @@
         <assets>
             <icon>resources/media/icon.png</icon>
         </assets>
-        <news>v0.2.0
+        <news>v0.2.1
+- SponsorBlock skips apply only to SmartTube videos; Plex episodes no longer inherit the last trailer's segments.
+- A skipped segment no longer loops when the stream resumes short of the segment end, and an outro at the end of a video finishes the video.
+
+v0.2.0
 - Add ranked trailer playback and trailer rows for Starlight and PlexKodiConnect.
 - Add Live now for followed and supplied subscription channels, with live source properties.
 - Exclude scheduled streams from Live now and correct nested route URLs.
