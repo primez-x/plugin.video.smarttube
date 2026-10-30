@@ -100,6 +100,7 @@ def main():
     skips = None
     watched = None
     position = total = None
+    sample = None
     saved_at = 0
     xbmc.log('[%s] SponsorBlock service started' % ADDON_ID, xbmc.LOGINFO)
     while not monitor.abortRequested():
@@ -110,6 +111,7 @@ def main():
             loaded_for = playing_file
             skips = None
             watched = None
+            sample = None
             video_id = home.getProperty('SmartTube.VideoId')
             if (playing_file and video_id
                     and playing_file == home.getProperty('SmartTube.StreamUrl')):
@@ -134,20 +136,20 @@ def main():
                         xbmc.log(
                             '[%s] SponsorBlock lookup failed: %s'
                             % (ADDON_ID, exc), xbmc.LOGWARNING)
-        if watched is not None:
+        previous, sample = sample, None
+        if watched is not None or skips is not None:
             try:
-                position, total = player.getTime(), player.getTotalTime() or total
+                sample, total_time = player.getTime(), player.getTotalTime()
             except RuntimeError:
                 pass
-            if position is not None and time.time() - saved_at >= SAVE_INTERVAL:
-                _record(watched, position, total)
-                saved_at = time.time()
-        if skips is not None:
-            try:
-                segment = skips.check(player.getTime())
-                total_time = player.getTotalTime()
-            except RuntimeError:
-                segment = None
+        # Act only on a position that continues the previous sample.
+        if extras.steady(previous, sample):
+            if watched is not None:
+                position, total = sample, total_time or total
+                if time.time() - saved_at >= SAVE_INTERVAL:
+                    _record(watched, position, total)
+                    saved_at = time.time()
+            segment = skips.check(sample) if skips is not None else None
             if segment is not None:
                 if extras.ends_video(segment, total_time):
                     _end_playback(player)

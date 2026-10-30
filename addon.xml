@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.smarttube" name="SmartTube" version="0.3.0" provider-name="primez-x">
+<addon id="plugin.video.smarttube" name="SmartTube" version="0.3.1" provider-name="primez-x">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="inputstream.adaptive" version="19.0.0"/>
@@ -17,7 +17,10 @@
         <assets>
             <icon>resources/media/icon.png</icon>
         </assets>
-        <news>v0.3.0
+        <news>v0.3.1
+- SponsorBlock no longer skips far ahead after a seek: skips and resume points use only positions that continue playback. Kodi can report a wrong position while a seek runs.
+
+v0.3.0
 - Add app sections: Subscriptions, Continue watching, Recommended, Trending, History, Watch later, Channels, Playlists, Search history, and the Music, Gaming, News, Sports, Live, Learning and Fashion pages.
 - Every section has a fixed plugin path for skin hubs and widgets.
 - Follow up to 200 channels and import subscriptions.csv from Google Takeout. Followed channel IDs from the old setting move to the new list.

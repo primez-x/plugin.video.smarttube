@@ -118,6 +118,22 @@ class SegmentSkips(object):
         return target
 
 
+# The service samples the position once per second.
+MAX_STEP = 3.0
+
+
+def steady(previous, position):
+    """True when position continues playback from the previous sample.
+
+    While a seek or a stall recovery runs, Kodi can report a position far
+    from the real one (the end of the video, or a point minutes ahead). A
+    jump, a stall or a pause gives no trusted position until the next
+    sample continues it.
+    """
+    return (previous is not None and position is not None
+            and 0 < position - previous <= MAX_STEP)
+
+
 def ends_video(segment, total_time):
     """True when segment runs to the end of a video of total_time seconds."""
     return total_time > 0 and segment['end'] >= total_time - 1.0
