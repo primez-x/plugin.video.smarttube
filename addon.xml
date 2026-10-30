@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.smarttube" name="SmartTube" version="0.2.1" provider-name="primez-x">
+<addon id="plugin.video.smarttube" name="SmartTube" version="0.3.0" provider-name="primez-x">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="inputstream.adaptive" version="19.0.0"/>
@@ -10,14 +10,23 @@
     <extension point="xbmc.service" library="resources/lib/service.py"/>
     <extension point="xbmc.addon.metadata">
         <summary lang="en_GB">SmartTube for Kodi</summary>
-        <description lang="en_GB">YouTube for Kodi without the bloat: search, browse and play with no API key and no sign-in, on Windows, Linux, CoreELEC, Android and every other Kodi platform. SponsorBlock skips sponsored segments during playback and DeArrow replaces clickbait titles and thumbnails. Unofficial add-on; signed-in features such as subscriptions and watch history sync are not included yet.</description>
+        <description lang="en_GB">YouTube for Kodi without the bloat: search, browse and play with no API key and no sign-in, on Windows, Linux, CoreELEC, Android and every other Kodi platform. Subscriptions, Continue watching, history, Watch later and saved playlists are kept on this device; import your subscriptions from Google Takeout. Trending, Live now, Recommended and the Music, Gaming, News and Sports pages work as folders, widgets and skin hubs. SponsorBlock skips sponsored segments during playback and DeArrow replaces clickbait titles and thumbnails. Unofficial add-on; Google account sync is not available.</description>
         <platform>all</platform>
         <license>GPL-2.0-only</license>
         <source>https://github.com/primez-x/plugin.video.smarttube</source>
         <assets>
             <icon>resources/media/icon.png</icon>
         </assets>
-        <news>v0.2.1
+        <news>v0.3.0
+- Add app sections: Subscriptions, Continue watching, Recommended, Trending, History, Watch later, Channels, Playlists, Search history, and the Music, Gaming, News, Sports, Live, Learning and Fashion pages.
+- Every section has a fixed plugin path for skin hubs and widgets.
+- Follow up to 200 channels and import subscriptions.csv from Google Takeout. Followed channel IDs from the old setting move to the new list.
+- Context menus: go to channel, related videos, Watch later, save playlist, follow, and remove from history.
+- Resume points and watch history for videos played from SmartTube lists. Trailers and links from other add-ons stay out of the history.
+- DeArrow titles and thumbnails now apply: lookups go to the DeArrow API instead of the DeArrow website.
+- Faster Live now and DeArrow on long lists. The empty signed-out Home feed is removed.
+
+v0.2.1
 - SponsorBlock skips apply only to SmartTube videos; Plex episodes no longer inherit the last trailer's segments.
 - A skipped segment no longer loops when the stream resumes short of the segment end, and an outro at the end of a video finishes the video.
 

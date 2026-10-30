@@ -8,6 +8,7 @@
     SPDX-License-Identifier: GPL-2.0-only
 """
 
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import urllib.error
@@ -16,7 +17,9 @@ import urllib.request
 
 
 SPONSORBLOCK_API = 'https://sponsor.ajay.app/api/skipSegments/{prefix}'
-DEARROW_API = 'https://dearrow.ajay.app/api/branding?videoID={video_id}'
+DEARROW_API = 'https://sponsor.ajay.app/api/branding?videoID={video_id}'
+DEARROW_THUMBNAIL = ('https://dearrow-thumb.ajay.app/api/v1/getThumbnail'
+                     '?videoID={video_id}&time={time}')
 RYD_API = 'https://returnyoutubedislikeapi.com/votes?videoId={video_id}'
 
 # Every SponsorBlock category SmartTube exposes.
@@ -26,6 +29,7 @@ ALL_CATEGORIES = (
 )
 
 _USER_AGENT = 'SmartTube-Kodi/0.1.0'
+BRANDING_TIMEOUT = 2
 
 
 def _default_get(url, timeout=10):
@@ -119,7 +123,7 @@ def ends_video(segment, total_time):
     return total_time > 0 and segment['end'] >= total_time - 1.0
 
 
-def parse_branding(data):
+def parse_branding(data, video_id=''):
     """Pick a DeArrow replacement (title, thumbnail) or (None, None).
 
     A candidate wins when it is locked or has a non-negative vote score;
@@ -139,7 +143,11 @@ def parse_branding(data):
         if not isinstance(candidate, dict) or candidate.get('original'):
             continue
         if candidate.get('locked') or (candidate.get('votes') or 0) >= 0:
-            thumbnail = candidate.get('thumbnailURL') or None
+            # DeArrow submits a frame time; the thumbnail service renders the frame.
+            timestamp = candidate.get('timestamp')
+            if isinstance(timestamp, (int, float)) and video_id:
+                thumbnail = DEARROW_THUMBNAIL.format(
+                    video_id=urllib.parse.quote(video_id), time=timestamp)
             break
     return title, thumbnail
 
@@ -147,12 +155,14 @@ def parse_branding(data):
 def fetch_branding(video_id, opener=None):
     url = DEARROW_API.format(video_id=urllib.parse.quote(video_id))
     try:
-        data = _get_json(url, opener)
+        # Titles are cosmetic: a slow answer must not hold up the listing.
+        data = _get_json(url, opener or (
+            lambda request_url: _default_get(request_url, timeout=BRANDING_TIMEOUT)))
     except urllib.error.HTTPError as exc:
         if exc.code == 404:  # No DeArrow submissions for this video.
             return None, None
         raise
-    return parse_branding(data)
+    return parse_branding(data, video_id)
 
 
 def apply_dearrow(items, fetch=None):
@@ -161,23 +171,27 @@ def apply_dearrow(items, fetch=None):
     Failures for a single video leave that item unchanged.
     """
     fetch = fetch or fetch_branding
-    result = []
-    for item in items or []:
+
+    def apply(item):
         if item.get('type') != 'video':
-            result.append(item)
-            continue
+            return item
         try:
             title, thumbnail = fetch(item['id'])
         except Exception:  # DeArrow must never break a listing.
-            result.append(item)
-            continue
+            return item
         updated = dict(item)
         if title:
             updated['title'] = title
         if thumbnail:
             updated['thumbnail'] = thumbnail
-        result.append(updated)
-    return result
+        return updated
+
+    items = list(items or [])
+    if not items:
+        return []
+    # One request per video; run them together so long pages stay fast.
+    with ThreadPoolExecutor(max_workers=min(16, len(items))) as pool:
+        return list(pool.map(apply, items))
 
 
 def parse_votes(data):

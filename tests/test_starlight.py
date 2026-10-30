@@ -87,13 +87,10 @@ class StarlightRouteTests(unittest.TestCase):
             with self.subTest(query=query), self.assertRaises(ValueError):
                 routes.parse_route('/trailer', query)
 
-    def test_live_and_follow_routes(self):
+    def test_live_route(self):
         route = routes.parse_route('/live_now', 'channel_ids=' + CHANNEL)
         self.assertEqual('live_now', route.action)
         self.assertEqual(CHANNEL, route.channel_ids)
-        route = routes.parse_route('/follow', 'channel_id=' + CHANNEL)
-        self.assertEqual('follow', route.action)
-        self.assertEqual(CHANNEL, route.channel_id)
 
     def test_route_url_uses_addon_root(self):
         self.assertEqual('plugin://plugin.video.smarttube/play/?video_id=abc',
@@ -135,17 +132,21 @@ class LiveTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             innertube.channel_ids('../not-a-channel')
         with self.assertRaises(ValueError):
-            innertube.channel_ids(','.join('UC' + str(n).zfill(22) for n in range(26)))
+            innertube.channel_ids(','.join('UC' + str(n).zfill(22)
+                                           for n in range(innertube.MAX_CHANNELS + 1)))
 
     def test_live_listing_continues_deduplicates_and_reports_failure(self):
         items, _ = innertube.parse_listing_response(response('live'))
-        with patch.object(innertube, 'browse', side_effect=[
-                ([items[1], items[2]], 'next'),
-                ([items[0], items[3]], ''), innertube.InnertubeError('offline')]) as browse:
+        pages = {('', CHANNEL): ([items[1], items[2]], 'next'), ('next', CHANNEL): ([items[0], items[3]], '')}
+        def browse(channel_id, params='', continuation='', **kwargs):
+            if channel_id == OTHER:
+                raise innertube.InnertubeError('offline')
+            return pages[continuation, channel_id]
+        with patch.object(innertube, 'browse', side_effect=browse) as browse_mock:
             live, failures = innertube.live_now([CHANNEL, CHANNEL, OTHER])
         self.assertEqual([CHANNEL], [v['channel_id'] for v in live])
         self.assertEqual([OTHER], failures)
-        self.assertEqual('next', browse.call_args_list[1].kwargs['continuation'])
+        self.assertEqual(3, browse_mock.call_count)
         self.assertEqual('livevideo01', live[0]['id'])
 
     def test_empty_and_page_limit(self):

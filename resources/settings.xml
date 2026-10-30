@@ -23,11 +23,27 @@
                         <heading>32021</heading>
                     </control>
                 </setting>
-                <setting id="followed_channels" type="string" label="32022" help="32024">
+            </group>
+        </category>
+        <category id="library" label="32080" help=""> <!-- Library -->
+            <group id="1" label="">
+                <setting id="import_subscriptions" type="action" label="32081" help="32087"> <!-- Import subscriptions from Google Takeout -->
                     <level>0</level>
-                    <default></default>
+                    <data>RunPlugin(plugin://plugin.video.smarttube/import_subscriptions/)</data>
                     <constraints><allowempty>true</allowempty></constraints>
-                    <control type="edit" format="string"><heading>32022</heading></control>
+                    <control type="button" format="action"><close>true</close></control>
+                </setting>
+                <setting id="clear_history" type="action" label="32075" help=""> <!-- Clear watch history -->
+                    <level>0</level>
+                    <data>RunPlugin(plugin://plugin.video.smarttube/manage/?op=clear&amp;list=history)</data>
+                    <constraints><allowempty>true</allowempty></constraints>
+                    <control type="button" format="action"><close>true</close></control>
+                </setting>
+                <setting id="clear_searches" type="action" label="32079" help=""> <!-- Clear search history -->
+                    <level>0</level>
+                    <data>RunPlugin(plugin://plugin.video.smarttube/manage/?op=clear&amp;list=searches)</data>
+                    <constraints><allowempty>true</allowempty></constraints>
+                    <control type="button" format="action"><close>true</close></control>
                 </setting>
             </group>
         </category>

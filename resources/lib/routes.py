@@ -9,18 +9,28 @@
       plugin://plugin.video.smarttube/channel/<CHANNEL_ID>
       plugin://plugin.video.smarttube/playlist/<PLAYLIST_ID>
 
+    App sections for hubs and widgets: subscriptions, continue, history,
+    watch_later, channels, playlists, trending, recommended, live_now and
+    explore/<category>. manage/ changes the local lists.
+
     SPDX-License-Identifier: GPL-2.0-only
 """
 
+import json
 import re
 from urllib.parse import parse_qs, quote, urlencode, urlsplit
+
+SECTIONS = ('subscriptions', 'continue', 'history', 'watch_later', 'channels',
+            'playlists', 'trending', 'recommended', 'import_subscriptions')
+LISTS = ('follows', 'history', 'watch_later', 'playlists', 'searches')
 
 
 class Route(object):
     def __init__(self, action='home', query='', video_id='', playlist_id='',
                  channel_id='', browse_id='', continuation='', live=False,
                  title='', year='', imdb='', tmdb='', media_type='',
-                 mode='play', channel_ids=''):
+                 mode='play', channel_ids='', category='', page=1,
+                 history=False, op='', list_name='', item=None):
         self.action = action
         self.query = query
         self.video_id = video_id
@@ -36,6 +46,12 @@ class Route(object):
         self.media_type = media_type
         self.mode = mode
         self.channel_ids = channel_ids
+        self.category = category
+        self.page = page
+        self.history = history
+        self.op = op
+        self.list_name = list_name
+        self.item = item
 
     def __repr__(self):
         return ('Route(action=%r, query=%r, video_id=%r, playlist_id=%r, '
@@ -56,6 +72,26 @@ def _first(params, *names):
     return ''
 
 
+def _manage(params):
+    op = _first(params, 'op')
+    list_name = _first(params, 'list')
+    if op not in ('add', 'remove', 'clear') or list_name not in LISTS:
+        raise ValueError('Invalid list operation')
+    item = None
+    if op == 'add':
+        try:
+            item = json.loads(_first(params, 'item'))
+        except ValueError:
+            raise ValueError('Invalid list item')
+        if not isinstance(item, dict) or not isinstance(item.get('id'), str) or not item['id']:
+            raise ValueError('Invalid list item')
+    elif op == 'remove':
+        item = {'id': _first(params, 'id')}
+        if not item['id']:
+            raise ValueError('A list item ID is required')
+    return Route('manage', op=op, list_name=list_name, item=item)
+
+
 def parse_route(path, query_string=''):
     """Parse a Kodi plugin path + query string into a Route."""
     params = parse_qs(query_string or '')
@@ -67,6 +103,22 @@ def parse_route(path, query_string=''):
     continuation = _first(params, 'continuation', 'ctoken')
     browse_id = _first(params, 'browse_id', 'browseId')
     live = _first(params, 'live') not in ('', '0', 'false', 'False')
+    page = _first(params, 'page')
+    page = int(page) if page.isdecimal() and int(page) > 0 else 1
+    if parts[:1] and parts[0] in SECTIONS:
+        return Route(parts[0], page=page)
+    if parts[:1] == ['explore']:
+        if len(parts) < 2:
+            raise ValueError('A category is required')
+        return Route('explore', category=parts[1], page=page)
+    if parts[:1] == ['related']:
+        if not video_id:
+            raise ValueError('A video ID is required')
+        return Route('related', video_id=video_id)
+    if parts[:1] == ['manage']:
+        return _manage(params)
+    if parts[:2] == ['search', 'new']:
+        return Route('search_prompt')
     if parts[:1] == ['trailer']:
         title = _first(params, 'title').strip()
         year = _first(params, 'year')
@@ -82,8 +134,6 @@ def parse_route(path, query_string=''):
                      media_type=media_type, mode=mode)
     if parts[:1] == ['live_now']:
         return Route('live_now', channel_ids=_first(params, 'channel_ids'))
-    if parts[:1] == ['follow']:
-        return Route('follow', channel_id=channel_id)
     # Standard YouTube play URLs for a channel's live stream.
     if parts[:1] == ['play'] and channel_id and not video_id:
         return Route('play_channel', channel_id=channel_id, live=True)
@@ -91,8 +141,11 @@ def parse_route(path, query_string=''):
         if playlist_id and not video_id:
             return Route('playlist', playlist_id=playlist_id,
                            continuation=continuation)
-        return Route('play', video_id=video_id, playlist_id=playlist_id)
+        return Route('play', video_id=video_id, playlist_id=playlist_id,
+                     history=_first(params, 'history') == '1')
     if parts[:1] in (['search'], ['kodion']):
+        if not query and not continuation:
+            return Route('search_menu')
         return Route('search', query=query, continuation=continuation)
     if parts[:1] == ['channel'] and len(parts) >= 2:
         channel_id = channel_id or parts[1]

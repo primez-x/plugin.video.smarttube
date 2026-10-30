@@ -24,10 +24,6 @@ msgctxt "#32010"
 msgid "Search"
 msgstr ""
 
-msgctxt "#32011"
-msgid "Home"
-msgstr ""
-
 msgctxt "#32012"
 msgid "Next page"
 msgstr ""
@@ -103,14 +99,139 @@ msgctxt "#32019"
 msgid "No matching trailer found"
 msgstr ""
 
-msgctxt "#32022"
-msgid "Followed channel IDs"
-msgstr ""
-
 msgctxt "#32023"
 msgid "Some live channels could not be checked"
 msgstr ""
 
-msgctxt "#32024"
-msgid "Follow channels from the context menu, or enter comma-separated YouTube channel IDs. Live now checks up to 25 channels."
+# App sections
+msgctxt "#32050"
+msgid "Subscriptions"
+msgstr ""
+
+msgctxt "#32051"
+msgid "Continue watching"
+msgstr ""
+
+msgctxt "#32052"
+msgid "Recommended"
+msgstr ""
+
+msgctxt "#32053"
+msgid "Trending"
+msgstr ""
+
+msgctxt "#32054"
+msgid "History"
+msgstr ""
+
+msgctxt "#32055"
+msgid "Watch later"
+msgstr ""
+
+msgctxt "#32056"
+msgid "Channels"
+msgstr ""
+
+msgctxt "#32057"
+msgid "Playlists"
+msgstr ""
+
+msgctxt "#32058"
+msgid "New search"
+msgstr ""
+
+msgctxt "#32059"
+msgid "Music"
+msgstr ""
+
+msgctxt "#32060"
+msgid "Gaming"
+msgstr ""
+
+msgctxt "#32061"
+msgid "News"
+msgstr ""
+
+msgctxt "#32062"
+msgid "Sports"
+msgstr ""
+
+msgctxt "#32063"
+msgid "Live"
+msgstr ""
+
+msgctxt "#32064"
+msgid "Learning"
+msgstr ""
+
+msgctxt "#32065"
+msgid "Fashion & Beauty"
+msgstr ""
+
+msgctxt "#32070"
+msgid "Go to channel"
+msgstr ""
+
+msgctxt "#32071"
+msgid "Related videos"
+msgstr ""
+
+msgctxt "#32072"
+msgid "Save to Watch later"
+msgstr ""
+
+msgctxt "#32073"
+msgid "Remove from Watch later"
+msgstr ""
+
+msgctxt "#32074"
+msgid "Remove from history"
+msgstr ""
+
+msgctxt "#32075"
+msgid "Clear watch history"
+msgstr ""
+
+msgctxt "#32076"
+msgid "Save playlist"
+msgstr ""
+
+msgctxt "#32077"
+msgid "Remove playlist"
+msgstr ""
+
+msgctxt "#32078"
+msgid "Remove from search history"
+msgstr ""
+
+msgctxt "#32079"
+msgid "Clear search history"
+msgstr ""
+
+msgctxt "#32080"
+msgid "Library"
+msgstr ""
+
+msgctxt "#32081"
+msgid "Import subscriptions from Google Takeout"
+msgstr ""
+
+msgctxt "#32082"
+msgid "Choose subscriptions.csv"
+msgstr ""
+
+msgctxt "#32083"
+msgid "New channels followed: %d"
+msgstr ""
+
+msgctxt "#32084"
+msgid "Subscriptions could not be loaded"
+msgstr ""
+
+msgctxt "#32086"
+msgid "Clear this list? This cannot be undone."
+msgstr ""
+
+msgctxt "#32087"
+msgid "In Google Takeout, export YouTube subscriptions, then choose subscriptions.csv. SmartTube follows up to 200 channels without a Google sign-in."
 msgstr ""

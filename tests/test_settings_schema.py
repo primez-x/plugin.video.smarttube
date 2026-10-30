@@ -7,7 +7,8 @@ from xml.etree import ElementTree
 
 ROOT = Path(__file__).parents[1]
 EXPECTED_SETTINGS = (
-    'language', 'region', 'followed_channels', 'dearrow', 'dislikes',
+    'language', 'region', 'import_subscriptions', 'clear_history',
+    'clear_searches', 'dearrow', 'dislikes',
     'sponsorblock', 'sponsorblock_sponsor', 'sponsorblock_intro_outro',
     'sponsorblock_interaction', 'sponsorblock_filler',
     'sponsorblock_notify')

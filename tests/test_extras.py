@@ -110,15 +110,27 @@ class CategoryTests(unittest.TestCase):
 
 class DeArrowTests(unittest.TestCase):
     def test_parse_branding(self):
+        # Shape of a live sponsor.ajay.app/api/branding answer.
         title, thumb = extras.parse_branding({
             'titles': [
                 {'title': 'Orig', 'original': True, 'votes': 5},
                 {'title': 'Better Title', 'original': False, 'votes': 3}],
             'thumbnails': [
-                {'thumbnailURL': 'https://x.test/t.jpg',
-                 'original': False, 'locked': True}]})
+                {'timestamp': None, 'original': True, 'votes': 9},
+                {'timestamp': 3.92349, 'original': False, 'locked': True}]}, 'dQw4w9WgXcQ')
         self.assertEqual('Better Title', title)
-        self.assertEqual('https://x.test/t.jpg', thumb)
+        self.assertEqual('https://dearrow-thumb.ajay.app/api/v1/getThumbnail'
+                         '?videoID=dQw4w9WgXcQ&time=3.92349', thumb)
+
+    def test_thumbnail_without_a_timestamp_is_skipped(self):
+        self.assertEqual((None, None), extras.parse_branding(
+            {'titles': [], 'thumbnails': [{'original': False, 'locked': True}]}, 'abc'))
+
+    def test_branding_comes_from_the_api_host(self):
+        from unittest.mock import patch
+        with patch.object(extras, '_default_get', return_value=b'{}') as get:
+            extras.fetch_branding('abc')
+        self.assertEqual('https://sponsor.ajay.app/api/branding?videoID=abc', get.call_args.args[0])
 
     def test_negative_votes_do_not_win(self):
         title, thumb = extras.parse_branding({
@@ -126,6 +138,15 @@ class DeArrowTests(unittest.TestCase):
             'thumbnails': []})
         self.assertIsNone(title)
         self.assertIsNone(thumb)
+
+    def test_branding_lookup_has_a_short_deadline(self):
+        from unittest.mock import patch
+        with patch.object(extras, '_default_get', return_value=b'{}') as get:
+            extras.fetch_branding('abc')
+        self.assertLessEqual(get.call_args.kwargs['timeout'], 2)
+        with patch.object(extras, '_default_get', side_effect=TimeoutError('slow')):
+            self.assertEqual([{'type': 'video', 'id': 'abc', 'title': 'Kept'}],
+                             extras.apply_dearrow([{'type': 'video', 'id': 'abc', 'title': 'Kept'}]))
 
     def test_apply_dearrow_isolates_failures(self):
         items = [

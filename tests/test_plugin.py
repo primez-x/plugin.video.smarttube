@@ -3,6 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
@@ -11,17 +12,24 @@ ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / 'resources/lib'))
 import innertube
 from test_innertube import player_response
+from test_feeds import feed
 
 CHANNEL = 'UC' + 'a' * 22
+OTHER = 'UC' + 'b' * 22
 
 
 class PluginTests(unittest.TestCase):
     def setUp(self):
-        self.settings = {'language': 'en', 'region': 'US', 'followed_channels': CHANNEL}
+        self.settings = {'language': 'en', 'region': 'US'}
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.profile = Path(tmp.name)
+        (self.profile / 'settings.xml').write_text(
+            '<settings version="2"><setting id="followed_channels">%s</setting></settings>' % CHANNEL)
         self.addon = MagicMock()
         self.addon.getAddonInfo.side_effect = lambda key: {
             'id': 'plugin.video.smarttube', 'path': str(ROOT) + '/',
-            'name': 'SmartTube', 'icon': ''}.get(key, '')
+            'name': 'SmartTube', 'icon': '', 'profile': str(self.profile)}.get(key, '')
         self.addon.getSetting.side_effect = lambda key: self.settings.get(key, '')
         self.addon.setSetting.side_effect = self.settings.__setitem__
         self.addon.getSettingBool.return_value = False
@@ -29,9 +37,12 @@ class PluginTests(unittest.TestCase):
         self.gui = MagicMock()
         self.gui.ListItem.side_effect = lambda *a, **kw: MagicMock()
         self.kodi = MagicMock()
+        self.xbmc = MagicMock()
+        self.vfs = MagicMock()
+        self.vfs.translatePath.side_effect = lambda path: path
         self.modules = patch.dict(sys.modules, {
-            'xbmc': MagicMock(), 'xbmcgui': self.gui, 'xbmcplugin': self.kodi,
-            'xbmcaddon': SimpleNamespace(Addon=lambda: self.addon)})
+            'xbmc': self.xbmc, 'xbmcgui': self.gui, 'xbmcplugin': self.kodi,
+            'xbmcvfs': self.vfs, 'xbmcaddon': SimpleNamespace(Addon=lambda: self.addon)})
         self.modules.start()
         self.addCleanup(self.modules.stop)
         spec = importlib.util.spec_from_file_location('smarttube_plugin', ROOT / 'resources/lib/plugin.py')
@@ -92,21 +103,143 @@ class PluginTests(unittest.TestCase):
         item.setProperty.assert_any_call('Starlight.IsLive', 'true')
         self.kodi.setResolvedUrl.assert_not_called()
 
-    def test_follow_toggle_and_imported_subscriptions_union(self):
-        self.run_route('follow', 'channel_id=' + CHANNEL)
-        self.assertEqual('', self.settings['followed_channels'])
-        self.run_route('follow', 'channel_id=' + CHANNEL)
-        self.assertEqual(CHANNEL, self.settings['followed_channels'])
-        other = 'UC' + 'b' * 22
+    def test_legacy_follows_migrate_and_union_with_supplied_channels(self):
         with patch.object(innertube, 'live_now', return_value=([], [])) as live:
-            self.run_route('live_now', 'channel_ids=' + other + ',' + CHANNEL)
-        self.assertEqual([CHANNEL, other], live.call_args.args[0])
+            self.run_route('live_now', 'channel_ids=' + OTHER + ',' + CHANNEL)
+        self.assertEqual([CHANNEL, OTHER], live.call_args.args[0])
+        self.assertEqual([CHANNEL], [e['id'] for e in self.plugin.STORE.load('follows')])
+
+    def test_follow_and_unfollow_through_manage(self):
+        self.run_route('manage/', 'op=remove&list=follows&id=' + CHANNEL)
+        self.assertEqual([], self.plugin.STORE.load('follows'))
+        item = json.dumps({'type': 'channel', 'id': OTHER, 'title': 'Other'})
+        self.run_route('manage/', 'op=add&list=follows&item=' + item)
+        self.assertEqual([OTHER], [e['id'] for e in self.plugin.STORE.load('follows')])
+        self.run_route('manage/', 'op=add&list=follows&item=' + json.dumps({'id': '../x'}))
+        self.assertEqual([OTHER], [e['id'] for e in self.plugin.STORE.load('follows')])
+        self.xbmc.executebuiltin.assert_any_call('Container.Refresh')
+        self.kodi.endOfDirectory.assert_not_called()
+
+    def listed(self):
+        return [call.args for call in self.kodi.addDirectoryItem.call_args_list]
+
+    def test_home_lists_every_section(self):
+        self.run_route('')
+        urls = [args[1] for args in self.listed()]
+        self.assertEqual(len(self.plugin.SECTIONS), len(urls))
+        for path in ('subscriptions/', 'continue/', 'trending/', 'live_now/', 'explore/gaming/'):
+            self.assertIn('plugin://plugin.video.smarttube/' + path, urls)
+        self.assertTrue(all(folder for _, _, _, folder in self.listed()))
+
+    def test_subscriptions_list_newest_uploads_with_history_play_urls(self):
+        uploads = feed(CHANNEL, [
+            ('old00000001', 'Old', 'watch?v=old00000001', '2026-10-01T00:00:00+00:00'),
+            ('new00000001', 'New', 'watch?v=new00000001', '2026-10-29T00:00:00+00:00'),
+            ('short000001', 'Short', 'shorts/short000001', '2026-10-30T00:00:00+00:00')])
+        with patch.object(innertube, '_default_get', return_value=uploads) as get:
+            self.run_route('subscriptions/')
+            self.run_route('subscriptions/')
+        self.assertEqual(1, get.call_count, 'the second call reads the feed cache')
+        urls = [args[1] for args in self.listed()]
+        self.assertEqual(['plugin://plugin.video.smarttube/play/?video_id=new00000001&history=1',
+                          'plugin://plugin.video.smarttube/play/?video_id=old00000001&history=1'],
+                         urls[:2])
+        self.assertEqual(4, len(urls))
+
+    def test_unreachable_subscriptions_fail_the_listing(self):
+        with patch.object(innertube, '_default_get', side_effect=OSError('offline')):
+            self.run_route('subscriptions/')
+        self.kodi.endOfDirectory.assert_called_once_with(7, succeeded=False)
+
+    def test_watch_later_round_trip_and_context_toggle(self):
+        item = json.dumps({'type': 'video', 'id': 'saved000001', 'title': 'Saved', 'channel_id': CHANNEL})
+        self.run_route('manage/', 'op=add&list=watch_later&item=' + item)
+        self.run_route('watch_later/')
+        (_, url, list_item, folder), = self.listed()
+        self.assertEqual(('plugin://plugin.video.smarttube/play/?video_id=saved000001&history=1', False),
+                         (url, folder))
+        labels = [label for label, _ in list_item.addContextMenuItems.call_args.args[0]]
+        self.assertEqual(['32070', '32071', '32073', '32018'], labels)
+
+    def test_history_continue_and_resume_points(self):
+        store = self.plugin.STORE
+        store.record_progress({'type': 'video', 'id': 'done0000001', 'title': 'Done'}, 590, 600)
+        store.record_progress({'type': 'video', 'id': 'half0000001', 'title': 'Half'}, 300, 600)
+        self.run_route('continue/')
+        (_, url, list_item, _), = self.listed()
+        self.assertIn('half0000001', url)
+        list_item.getVideoInfoTag.return_value.setResumePoint.assert_called_once_with(300, 600)
+        labels = [label for label, _ in list_item.addContextMenuItems.call_args.args[0]]
+        self.assertEqual(['32074', '32075'], labels[-2:])
+        self.kodi.reset_mock()
+        self.run_route('history/')
+        self.assertEqual(2, len(self.listed()))
+
+    def test_long_category_pages_split_locally(self):
+        rows = [{'type': 'video', 'id': 'v%03d' % n, 'title': str(n)} for n in range(130)]
+        with patch.object(innertube, 'explore', return_value=(rows, 'ignored')):
+            self.run_route('explore/news/', 'page=2')
+        urls = [args[1] for args in self.listed()]
+        self.assertEqual(61, len(urls))
+        self.assertIn('video_id=v060', urls[0])
+        self.assertEqual('plugin://plugin.video.smarttube/explore/news/?page=3', urls[-1])
+
+    def test_clear_needs_confirmation(self):
+        self.plugin.STORE.add('searches', {'id': 'cats'})
+        self.gui.Dialog.return_value.yesno.return_value = False
+        self.run_route('manage/', 'op=clear&list=searches')
+        self.assertEqual(1, len(self.plugin.STORE.load('searches')))
+        self.gui.Dialog.return_value.yesno.return_value = True
+        self.run_route('manage/', 'op=clear&list=searches')
+        self.assertEqual([], self.plugin.STORE.load('searches'))
+
+    def test_search_prompt_records_query_and_menu_lists_it(self):
+        self.gui.Dialog.return_value.input.return_value = ' cats '
+        self.run_route('search/new/')
+        self.kodi.endOfDirectory.assert_called_once_with(7, succeeded=False)
+        self.xbmc.executebuiltin.assert_called_with(
+            'Container.Update(plugin://plugin.video.smarttube/search/?q=cats)')
+        self.kodi.reset_mock()
+        self.run_route('search/')
+        urls = [args[1] for args in self.listed()]
+        self.assertEqual(['plugin://plugin.video.smarttube/search/new/',
+                          'plugin://plugin.video.smarttube/search/?q=cats'], urls)
+
+    def test_widget_search_does_not_record_history(self):
+        with self.replay('trailers'):
+            self.run_route('search/', 'q=orbit')
+        self.assertEqual([], self.plugin.STORE.load('searches'))
+        self.assertTrue(self.listed())
+
+    def test_takeout_import_adds_channels(self):
+        self.gui.Dialog.return_value.browseSingle.return_value = '/media/subscriptions.csv'
+        self.vfs.File.return_value.read.return_value = (
+            'Channel Id,Channel Url,Channel Title\n' + CHANNEL + ',u,Known\n' + OTHER + ',u,Other\n')
+        self.addon.getLocalizedString.side_effect = lambda string_id: (
+            'New channels followed: %d' if string_id == 32083 else str(string_id))
+        self.plugin.main(['plugin://plugin.video.smarttube/import_subscriptions/', '-1', ''])
+        self.assertEqual([CHANNEL, OTHER], [e['id'] for e in self.plugin.STORE.load('follows')])
+        self.gui.Dialog.return_value.notification.assert_called_once()
+        self.assertEqual('New channels followed: 1',
+                         self.gui.Dialog.return_value.notification.call_args.args[1])
+        self.kodi.endOfDirectory.assert_not_called()
 
     def test_offline_live_listing_reports_failure(self):
         with patch.object(innertube, 'live_now', return_value=([], [CHANNEL])):
             self.run_route('live_now')
         self.gui.Dialog.return_value.notification.assert_called()
         self.kodi.endOfDirectory.assert_called_once_with(7, succeeded=False)
+
+    def test_history_play_hands_the_item_to_the_service(self):
+        playback = player_response()
+        playback['videoDetails']['channelId'] = CHANNEL
+        with patch.object(innertube, '_default_opener', return_value=json.dumps(playback).encode()):
+            self.run_route('play/', 'video_id=abc&history=1')
+        item = dict(call.args for call in self.gui.Window.return_value.setProperty.call_args_list)
+        self.assertEqual({'type': 'video', 'id': 'abc', 'title': 'A Video', 'author': 'Channel One',
+                          'channel_id': CHANNEL, 'duration': 754, 'is_live': False,
+                          'thumbnail': 'https://i.ytimg.com/vi/abc/hqdefault.jpg'},
+                         json.loads(item['SmartTube.Item']))
 
     def test_live_play_uses_current_response(self):
         with self.replay('live'), patch.object(self.plugin, '_resolve_play') as play:
@@ -134,6 +267,7 @@ class PluginTests(unittest.TestCase):
         with patch.object(innertube, '_default_opener', side_effect=transport):
             self.run_route(path, query)
         self.assertEqual((7, True), self.kodi.setResolvedUrl.call_args.args[:2])
+        self.gui.Window.return_value.setProperty.assert_any_call('SmartTube.Item', '')
         resolved = self.kodi.setResolvedUrl.call_args.args[2]
         resolved.setProperty.assert_any_call('Starlight.Source', 'YouTube')
         resolved.setProperty.assert_any_call('IsLive', 'true' if live else 'false')

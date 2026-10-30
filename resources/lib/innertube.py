@@ -6,19 +6,23 @@
     public WEB InnerTube client; playback tries the same no-PO-token player
     clients that plugin.video.youtube defaults to (testsuite-params and VR
     clients), which return directly playable stream URLs or manifests.
+    Subscription uploads come from the public channel RSS feeds.
 
     SPDX-License-Identifier: GPL-2.0-only
 """
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 import re
 import unicodedata
 import urllib.error
 import urllib.request
+from xml.etree import ElementTree
 
 
 BASE_URL = 'https://www.youtube.com'
 V1_URL = BASE_URL + '/youtubei/v1/{endpoint}?key={key}&prettyPrint=false'
+FEED_URL = BASE_URL + '/feeds/videos.xml?channel_id={channel_id}'
 
 # Public InnerTube client keys (shipped in YouTube's own clients; these are
 # not user credentials). Client versions need periodic bumps, as upstream.
@@ -44,6 +48,20 @@ CLIENTS = {
                            'Chrome/140.0.0.0 Safari/537.36'),
             'X-YouTube-Client-Name': '1',
             'X-YouTube-Client-Version': '2.20250925.01.00',
+        },
+    },
+    'web_remix': {
+        'key': _API_KEYS['web'],
+        'client': {
+            'clientName': 'WEB_REMIX',
+            'clientVersion': '1.20250922.03.00',
+        },
+        'headers': {
+            'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                           'AppleWebKit/537.36 (KHTML, like Gecko) '
+                           'Chrome/140.0.0.0 Safari/537.36'),
+            'X-YouTube-Client-Name': '67',
+            'X-YouTube-Client-Version': '1.20250922.03.00',
         },
     },
     'android_testsuite': {
@@ -108,6 +126,21 @@ CLIENTS = {
 PLAYER_CLIENT_ORDER = ('android_testsuite', 'ios_testsuite', 'android_vr')
 LISTING_CLIENT = 'web'
 CHANNEL_STREAMS_PARAMS = 'EgdzdHJlYW1z8gYECgJ6AA%3D%3D'
+# Followed channels and per-request channel lists share one limit.
+MAX_CHANNELS = 200
+_WORKERS = 16
+
+# YouTube's signed-out category pages. YouTube retired the general
+# Trending page in July 2025; trending() reads YouTube Charts instead.
+EXPLORE = {
+    'music': 'UC-9-kyTW8ZkZNDHQJ6FgpwQ',
+    'gaming': 'UCOpNcN46UbXVtpKMrmU4Abg',
+    'news': 'UCYfdidRxbB8Qhf0Nx7ioOYw',
+    'sports': 'UCEgdi0XIXXZ-qJOFPf4JSKw',
+    'live': 'UC4R8DWoMoI7CAwX8_LjQHig',
+    'learning': 'UCtFRv9O2AHqOZjjynzrv-xg',
+    'fashion': 'UCrpQ4p1Ql_hG8rKXIKM1MOQ',
+}
 
 
 class InnertubeError(Exception):
@@ -117,6 +150,13 @@ class InnertubeError(Exception):
 def _default_opener(url, data, headers, timeout):
     request = urllib.request.Request(url, data=data, headers=headers,
                                      method='POST')
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.read()
+
+
+def _default_get(url, timeout=10):
+    request = urllib.request.Request(url, headers={
+        'User-Agent': CLIENTS['web']['headers']['User-Agent']})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return response.read()
 
@@ -282,6 +322,13 @@ def _lockup_video_item(model):
     })
 
 
+def _video_card_item(renderer):
+    """Category pages (Gaming) use cards with byline and metadata text."""
+    return _video_item(dict(renderer,
+                            shortBylineText=renderer.get('bylineText') or {},
+                            viewCountText=renderer.get('metadataText') or {}))
+
+
 def _channel_item(renderer):
     channel_id = renderer.get('channelId')
     if not channel_id:
@@ -325,6 +372,7 @@ def _playlist_item(renderer):
 _RENDERER_PARSERS = {
     'lockupViewModel': _lockup_video_item,
     'videoRenderer': _video_item,
+    'videoCardRenderer': _video_card_item,
     'compactVideoRenderer': _video_item,
     'gridVideoRenderer': _video_item,
     'playlistVideoRenderer': _video_item,
@@ -380,6 +428,7 @@ def parse_player_response(data):
     except (TypeError, ValueError):
         info['length_seconds'] = 0
     info['is_live'] = bool(details.get('isLiveContent'))
+    info['channel_id'] = details.get('channelId') or ''
     if status.get('status') != 'OK':
         info['reason'] = (status.get('reason')
                           or status.get('status') or 'Not playable')
@@ -550,7 +599,7 @@ def find_trailers(title, year, media_type='', hl='en', gl='US', opener=None):
 
 
 def channel_ids(value):
-    """Validate up to 25 unique public channel IDs from a list or text."""
+    """Validate up to MAX_CHANNELS unique public channel IDs from a list or text."""
     values = re.split(r'[,\s]+', value.strip()) if isinstance(value, str) else value
     result = []
     for channel_id in values:
@@ -560,34 +609,156 @@ def channel_ids(value):
             raise ValueError('Use public YouTube channel IDs (UC plus 22 characters)')
         if channel_id not in result:
             result.append(channel_id)
-    if len(result) > 25:
-        raise ValueError('Live now supports up to 25 channels per request')
+    if len(result) > MAX_CHANNELS:
+        raise ValueError('Use up to %d channels' % MAX_CHANNELS)
     return result
 
 
-def live_now(channels, hl='en', gl='US', opener=None):
-    """Return one current stream per channel plus IDs whose browse request failed."""
-    items = []
-    failures = []
-    for channel_id in channel_ids(channels):
-        continuation = ''
-        seen = set()
+def _parallel(function, keys):
+    """Run function per key; return ({key: result}, [failed keys]) in key order."""
+    def run(key):
         try:
-            for _ in range(3):
-                page, token = browse(
-                    channel_id, params=CHANNEL_STREAMS_PARAMS,
-                    continuation=continuation, hl=hl, gl=gl, opener=opener)
-                current = sorted((item for item in page
-                                  if item['type'] == 'video' and item.get('is_live')),
-                                 key=lambda item: item['id'])
-                if current:
-                    items.append(dict(current[0], channel_id=channel_id))
-                    break
-                if not token or token in seen:
-                    break
-                seen.add(token)
-                continuation = token
+            return True, function(key)
         except (InnertubeError, OSError, ValueError):
-            failures.append(channel_id)
+            return False, None
+    if not keys:
+        return {}, []
+    with ThreadPoolExecutor(max_workers=min(_WORKERS, len(keys))) as pool:
+        outcomes = list(pool.map(run, keys))
+    results = dict((key, value) for key, (ok, value) in zip(keys, outcomes) if ok)
+    return results, [key for key, (ok, _) in zip(keys, outcomes) if not ok]
+
+
+def channel_live(channel_id, hl='en', gl='US', opener=None):
+    """Return the channel's current stream, or None; read at most three pages."""
+    continuation = ''
+    seen = set()
+    for _ in range(3):
+        page, token = browse(
+            channel_id, params=CHANNEL_STREAMS_PARAMS,
+            continuation=continuation, hl=hl, gl=gl, opener=opener)
+        current = sorted((item for item in page
+                          if item['type'] == 'video' and item.get('is_live')),
+                         key=lambda item: item['id'])
+        if current:
+            return dict(current[0], channel_id=channel_id)
+        if not token or token in seen:
+            return None
+        seen.add(token)
+        continuation = token
+    return None
+
+
+def live_now(channels, hl='en', gl='US', opener=None, lookup=None):
+    """Return one current stream per channel plus IDs whose lookup failed."""
+    lookup = lookup or (lambda channel_id: channel_live(
+        channel_id, hl=hl, gl=gl, opener=opener))
+    results, failures = _parallel(lookup, channel_ids(channels))
+    items = [dict(item, channel_id=channel_id)
+             for channel_id, item in results.items() if item]
     return sorted(items, key=lambda item: (
         item.get('author', '').casefold(), item['channel_id'])), failures
+
+
+_ATOM = '{http://www.w3.org/2005/Atom}'
+_YT = '{http://www.youtube.com/xml/schemas/2015}'
+_MEDIA = '{http://search.yahoo.com/mrss/}'
+
+
+def parse_channel_feed(raw):
+    """Parse a channel RSS feed into video items; Shorts are left out."""
+    try:
+        root = ElementTree.fromstring(raw)
+    except ElementTree.ParseError as exc:
+        raise InnertubeError('Invalid channel feed: %s' % exc)
+    items = []
+    for entry in root.findall(_ATOM + 'entry'):
+        video_id = entry.findtext(_YT + 'videoId') or ''
+        link = entry.find(_ATOM + 'link')
+        if not video_id or (link is not None and '/shorts/' in (link.get('href') or '')):
+            continue
+        thumbnail = entry.find(_MEDIA + 'group/' + _MEDIA + 'thumbnail')
+        statistics = entry.find(_MEDIA + 'group/' + _MEDIA + 'community/'
+                                + _MEDIA + 'statistics')
+        views = statistics.get('views') if statistics is not None else ''
+        date = entry.findtext(_ATOM + 'published') or ''
+        items.append({
+            'type': 'video',
+            'id': video_id,
+            'title': entry.findtext(_ATOM + 'title') or '',
+            'author': entry.findtext(_ATOM + 'author/' + _ATOM + 'name') or '',
+            'duration': 0,
+            'views': '{:,} views'.format(int(views)) if (views or '').isdigit() else '',
+            'published': date[:10],
+            'date': date,
+            'thumbnail': thumbnail.get('url') if thumbnail is not None else '',
+            'is_live': False,
+            'channel_id': entry.findtext(_YT + 'channelId') or '',
+        })
+    return items
+
+
+def channel_feed(channel_id, opener=None):
+    """Return the latest uploads of one public channel."""
+    channel_id, = channel_ids([channel_id])
+    return parse_channel_feed((opener or _default_get)(
+        FEED_URL.format(channel_id=channel_id)))
+
+
+def subscriptions(channels, fetch=channel_feed):
+    """Merge the uploads of every channel, newest first, plus failed IDs."""
+    results, failures = _parallel(fetch, channel_ids(channels))
+    items = [item for uploads in results.values() for item in uploads]
+    items.sort(key=lambda item: item['id'])
+    items.sort(key=lambda item: item.get('date', ''), reverse=True)
+    return items, failures
+
+
+def parse_trending_chart(data):
+    """Return the browse ID of the regional 'Trending' chart in YouTube Charts."""
+    for key, renderer in _walk(data):
+        if (key == 'musicTwoRowItemRenderer'
+                and parse_text(renderer.get('title') or {}).startswith('Trending')):
+            browse_id = ((renderer.get('navigationEndpoint') or {})
+                         .get('browseEndpoint') or {}).get('browseId')
+            if browse_id:
+                return browse_id
+    raise InnertubeError('YouTube Charts has no trending list')
+
+
+def trending_chart(hl='en', gl='US', opener=None):
+    # Chart titles follow hl; the chart itself follows gl. Match English titles.
+    return parse_trending_chart(innertube_post(
+        'browse', 'web_remix', {'browseId': 'FEmusic_charts'},
+        hl='en', gl=gl, opener=opener))
+
+
+def trending(hl='en', gl='US', opener=None, chart=None):
+    """List the current YouTube Charts trending videos for the region."""
+    return browse(chart or trending_chart(hl=hl, gl=gl, opener=opener),
+                  hl=hl, gl=gl, opener=opener)
+
+
+def explore(category, hl='en', gl='US', opener=None):
+    if category not in EXPLORE:
+        raise ValueError('Unknown category: %s' % category)
+    return browse(EXPLORE[category], hl=hl, gl=gl, opener=opener)
+
+
+def related(video_id, hl='en', gl='US', opener=None):
+    """Return the videos YouTube suggests next to a video."""
+    items, _ = parse_listing_response(innertube_post(
+        'next', LISTING_CLIENT, {'videoId': video_id},
+        hl=hl, gl=gl, opener=opener))
+    return [item for item in items if item['id'] != video_id]
+
+
+def channel_metadata(channel_id, hl='en', gl='US', opener=None):
+    """Return the channel's name and largest avatar."""
+    data = innertube_post('browse', LISTING_CLIENT, {'browseId': channel_id},
+                          hl=hl, gl=gl, opener=opener)
+    metadata = (data.get('metadata') or {}).get('channelMetadataRenderer') or {}
+    if not metadata.get('title'):
+        raise InnertubeError('No metadata for channel %s' % channel_id)
+    return {'id': channel_id, 'title': metadata['title'],
+            'thumbnail': _thumbnail_url({'thumbnail': metadata.get('avatar') or {}})}
