@@ -191,19 +191,34 @@ def innertube_post(endpoint, client_name, payload=None, hl='en', gl='US',
         raise InnertubeError('Invalid %s response: %s' % (endpoint, exc))
 
 
+def _dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _list(value):
+    return value if isinstance(value, list) else []
+
+
+def _str(value):
+    return value if isinstance(value, str) else ''
+
+
+def _int(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+
 def parse_text(node):
     """Return plain text from an InnerTube simpleText/runs node."""
     if not isinstance(node, dict):
         return ''
-    if node.get('simpleText'):
+    if _str(node.get('simpleText')):
         return node['simpleText']
     runs = node.get('runs')
     if isinstance(runs, list):
-        return ''.join(run.get('text', '') for run in runs
+        return ''.join(_str(run.get('text')) for run in runs
                        if isinstance(run, dict))
-    label = ((node.get('accessibility') or {})
-             .get('accessibilityData') or {}).get('label')
-    return label or ''
+    return _str(_dict(_dict(node.get('accessibility'))
+                      .get('accessibilityData')).get('label'))
 
 
 def parse_duration(text):
@@ -410,7 +425,10 @@ def parse_listing_response(data):
 
 
 def parse_player_response(data):
-    """Parse a player response into playback info (no network, testable)."""
+    """Parse a player response into playback info (no network, testable).
+
+    YouTube data is untrusted: a field of the wrong type is not available.
+    """
     info = {
         'playable': False, 'reason': '', 'title': '', 'author': '',
         'length_seconds': 0, 'is_live': False,
@@ -420,46 +438,45 @@ def parse_player_response(data):
     if not isinstance(data, dict):
         info['reason'] = 'Empty player response'
         return info
-    status = data.get('playabilityStatus') or {}
-    details = data.get('videoDetails') or {}
-    info['title'] = details.get('title') or ''
-    info['author'] = details.get('author') or ''
+    status = _dict(data.get('playabilityStatus'))
+    details = _dict(data.get('videoDetails'))
+    info['title'] = _str(details.get('title'))
+    info['author'] = _str(details.get('author'))
     try:
         info['length_seconds'] = int(details.get('lengthSeconds') or 0)
     except (TypeError, ValueError):
         info['length_seconds'] = 0
     info['is_live'] = bool(details.get('isLiveContent'))
-    info['channel_id'] = details.get('channelId') or ''
+    info['channel_id'] = _str(details.get('channelId'))
     if status.get('status') != 'OK':
-        info['reason'] = (status.get('reason')
-                          or status.get('status') or 'Not playable')
+        info['reason'] = (_str(status.get('reason'))
+                          or _str(status.get('status')) or 'Not playable')
         return info
-    streaming = data.get('streamingData') or {}
-    info['hls_url'] = streaming.get('hlsManifestUrl') or ''
-    info['dash_url'] = streaming.get('dashManifestUrl') or ''
-    for fmt in streaming.get('formats') or []:
+    streaming = _dict(data.get('streamingData'))
+    info['hls_url'] = _str(streaming.get('hlsManifestUrl'))
+    info['dash_url'] = _str(streaming.get('dashManifestUrl'))
+    for fmt in _list(streaming.get('formats')):
         # Ciphered formats carry signatureCipher instead of url; the player
         # clients above are chosen because they return direct urls.
-        if isinstance(fmt, dict) and fmt.get('url'):
+        if isinstance(fmt, dict) and _str(fmt.get('url')):
             info['progressive'].append({
                 'itag': fmt.get('itag'), 'url': fmt['url'],
-                'height': fmt.get('height') or 0,
-                'mime': fmt.get('mimeType') or '',
+                'height': _int(fmt.get('height')),
+                'mime': _str(fmt.get('mimeType')),
             })
     info['progressive'].sort(key=lambda f: f['height'], reverse=True)
     # Separate audio and video files; dash.manifest lists them in one MPD.
     info['adaptive'] = [
-        fmt for fmt in streaming.get('adaptiveFormats') or []
+        fmt for fmt in _list(streaming.get('adaptiveFormats'))
         if isinstance(fmt, dict) and fmt.get('url')
         and fmt.get('initRange') and fmt.get('indexRange')]
-    tracks = (((data.get('captions') or {})
-               .get('playerCaptionsTracklistRenderer') or {})
-              .get('captionTracks')) or []
+    tracks = _list(_dict(_dict(data.get('captions'))
+                         .get('playerCaptionsTracklistRenderer')).get('captionTracks'))
     for track in tracks:
-        if isinstance(track, dict) and track.get('baseUrl'):
+        if isinstance(track, dict) and _str(track.get('baseUrl')):
             info['captions'].append({
-                'language': track.get('languageCode') or '',
-                'name': parse_text(track.get('name') or {}),
+                'language': _str(track.get('languageCode')),
+                'name': parse_text(track.get('name')),
                 'url': track['baseUrl'],
             })
     info['playable'] = bool(info['hls_url'] or info['dash_url']

@@ -37,6 +37,11 @@ def _digits(value):
                            and len(value) <= 18)
 
 
+def _byte_range(value):
+    return (isinstance(value, dict) and _digits(value.get('start')) and _digits(value.get('end'))
+            and int(value['start']) <= int(value['end']))
+
+
 # The characters that XML 1.0 allows
 _XML_TEXT = re.compile('[\t\n\r\x20-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]*\\Z')
 
@@ -52,8 +57,7 @@ def _usable(fmt):
     if not (_int(fmt.get('itag')) and _text(fmt.get('url')) and fmt['url']
             and _text(fmt.get('mimeType')) and fmt['mimeType']):
         return False
-    if not all(isinstance(fmt.get(key), dict) and _digits(fmt[key].get('start'))
-               and _digits(fmt[key].get('end')) for key in ('initRange', 'indexRange')):
+    if not all(_byte_range(fmt.get(key)) for key in ('initRange', 'indexRange')):
         return False
     if not all(fmt.get(key) is None or _int(fmt[key])
                for key in ('height', 'width', 'fps', 'bitrate', 'audioChannels')):

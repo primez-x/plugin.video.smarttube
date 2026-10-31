@@ -141,7 +141,9 @@ class ManifestTests(unittest.TestCase):
                   audio(152, bitrate=999998, approxDurationMs='9' * 19),
                   audio(153, bitrate=999999, approxDurationMs='9' * 4301),
                   audio(154, bitrate=10 ** 5000), audio(155, approxDurationMs=10 ** 5000),
-                  audio(156, audioChannels=-2)]
+                  audio(156, audioChannels=-2),
+                  video(298, 'vp09.00.40.08', 720, indexRange={'start': '2000', 'end': '220'}),
+                  audio(157, initRange={'start': '10', 'end': '9'})]
         root = parse(dash.manifest(broken + [video(303, 'vp09.00.41.08', 1080), audio(140)]))
         self.assertEqual([[303], [140]], [itags(s) for s in sets(root)])
 

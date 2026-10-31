@@ -150,6 +150,43 @@ class PlayerParserTests(unittest.TestCase):
         self.assertEqual([303], [fmt['itag'] for fmt in info['adaptive']])
         self.assertTrue(info['playable'])
 
+    def test_malformed_collections_keep_the_valid_streams(self):
+        # YouTube data is untrusted: a field of the wrong type is not available.
+        data = player_response()
+        data['streamingData'] = {'hlsManifestUrl': 'https://example.test/vod.m3u8',
+                                 'dashManifestUrl': 42, 'formats': 42, 'adaptiveFormats': 42}
+        data['captions'] = {'playerCaptionsTracklistRenderer': {'captionTracks': 42}}
+        info = innertube.parse_player_response(data)
+        self.assertEqual(('https://example.test/vod.m3u8', 'hls'), innertube.choose_stream(info))
+        self.assertEqual(([], [], [], ''),
+                         (info['adaptive'], info['progressive'], info['captions'], info['dash_url']))
+        for broken in ({'playabilityStatus': 'OK'}, {'videoDetails': ['title']},
+                       {'streamingData': ['hls']}, {'captions': 'en'},
+                       {'captions': {'playerCaptionsTracklistRenderer': 'en'}},
+                       {'videoDetails': {'title': 42, 'author': ['a'], 'channelId': {}}}):
+            info = innertube.parse_player_response(dict(player_response(), **broken))
+            self.assertIsInstance(info['title'], str)
+            self.assertIsInstance(info['author'], str)
+            self.assertIsInstance(info['channel_id'], str)
+
+    def test_malformed_formats_and_captions_are_skipped(self):
+        data = player_response()
+        data['streamingData'] = {'formats': [
+            {'itag': 22, 'url': 42, 'height': 720},
+            {'itag': 18, 'url': 'https://example.test/360.mp4', 'height': '360'},
+            {'itag': 17, 'url': 'https://example.test/144.mp4', 'height': 144}]}
+        data['captions'] = {'playerCaptionsTracklistRenderer': {'captionTracks': [
+            {'baseUrl': 42, 'languageCode': 'de'},
+            {'baseUrl': 'https://example.test/en', 'languageCode': 7, 'name': {'simpleText': 9}},
+            {'baseUrl': 'https://example.test/fr', 'name': {'runs': [{'text': 3}, {'text': 'Fr'}]}},
+            {'baseUrl': 'https://example.test/es', 'name': {'accessibility': 'es'}}]}}
+        info = innertube.parse_player_response(data)
+        self.assertEqual([('https://example.test/144.mp4', 144), ('https://example.test/360.mp4', 0)],
+                         [(f['url'], f['height']) for f in info['progressive']])
+        self.assertEqual([('', '', 'https://example.test/en'), ('', 'Fr', 'https://example.test/fr'),
+                          ('', '', 'https://example.test/es')],
+                         [(t['language'], t['name'], t['url']) for t in info['captions']])
+
     def test_unplayable(self):
         info = innertube.parse_player_response({
             'playabilityStatus': {
