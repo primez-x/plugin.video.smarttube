@@ -40,6 +40,8 @@ class SegmentTests(unittest.TestCase):
             {'segment': [10, json.loads('1e309')], 'category': 'sponsor'},
             {'segment': ['NaN', 20], 'category': 'sponsor'},
             {'segment': [-5, 3], 'category': 'intro'},
+            # float() of an int above the float range raises OverflowError
+            {'segment': [10, 10 ** 400], 'category': 'sponsor'},
             {'segment': [30, 40], 'category': 'outro'}]}]
         self.assertEqual(['outro'], [s['category'] for s in extras.parse_segments(data, 'vid1')])
 

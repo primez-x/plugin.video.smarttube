@@ -280,6 +280,19 @@ class PluginTests(unittest.TestCase):
         resolved.setMimeType.assert_called_with('application/dash+xml')
         self.gui.Window.return_value.setProperty.assert_any_call('SmartTube.StreamUrl', url)
 
+    def test_a_video_id_with_a_path_writes_no_manifest(self):
+        import test_dash
+        playback = player_response()
+        playback['streamingData'] = {'adaptiveFormats': test_dash.FOUR_K,
+                                     'hlsManifestUrl': 'https://example.test/video.m3u8'}
+        self.gui.Window.return_value.getProperty.side_effect = lambda key: (
+            '41234' if key == 'SmartTube.ManifestPort' else '')
+        with patch.object(innertube, '_default_opener', return_value=json.dumps(playback).encode()):
+            self.run_route('play/', 'video_id=../../outside')
+        self.assertEqual([], sorted(str(path) for path in self.profile.rglob('*.mpd')))
+        self.assertEqual('https://example.test/video.m3u8',
+                         self.gui.ListItem.call_args.kwargs.get('path') or self.gui.ListItem.call_args.args[0])
+
     def test_an_hdr_display_gets_the_hdr_streams_on_kodi_22(self):
         self._play_adaptive('HDR10, HLG', kodi='22.0-ALPHA2 (21.90.802) Git:20261001')
         self.assertIn('id="337"', self.manifest())

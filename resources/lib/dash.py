@@ -178,7 +178,9 @@ MANIFEST_NAME = re.compile(r'dash-[A-Za-z0-9_-]+\.mpd')
 
 
 def manifest_name(video_id):
-    return 'dash-%s.mpd' % video_id
+    """The file name of the manifest, or None for a video ID that is not a plain name."""
+    name = 'dash-%s.mpd' % video_id
+    return name if MANIFEST_NAME.fullmatch(name) else None
 
 
 class ManifestServer(object):

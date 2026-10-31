@@ -278,6 +278,8 @@ def _dash_manifest(video_id, info, port):
     # One file per video: the service treats a new URL as a new video.
     # The service prunes old files with the rest of the cache.
     name = dash.manifest_name(video_id)
+    if not name:
+        return '', ''
     try:
         library.write_text(os.path.join(CACHE.directory, name), manifest)
     except OSError as exc:

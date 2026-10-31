@@ -63,7 +63,7 @@ def parse_segments(data, video_id):
                 continue
             try:
                 start, end = float(span[0]), float(span[1])
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 continue
             if 0 <= start < end < math.inf:
                 segments.append({
