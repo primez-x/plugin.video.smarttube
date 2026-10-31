@@ -293,6 +293,17 @@ def _resolve_play(handle, video_id, history=False):
              xbmc.LOGWARNING)
         info, client_name = None, ''
     url, kind = _dash_manifest(video_id, info) if info else ('', '')
+    if not url and info and not (info['dash_url'] or info['hls_url']):
+        # Without DASH, a manifest from a later client beats a progressive file.
+        later = innertube.PLAYER_CLIENT_ORDER
+        later = later[later.index(client_name) + 1:] if client_name in later else ()
+        try:
+            manifest = innertube.get_playback(video_id, hl=language, gl=region,
+                                              clients=later, adaptive=False)
+        except innertube.InnertubeError:
+            manifest = None
+        if manifest and (manifest[0]['dash_url'] or manifest[0]['hls_url']):
+            info, client_name = manifest
     if not url:
         url, kind = innertube.choose_stream(info) if info else ('', '')
     if not url:

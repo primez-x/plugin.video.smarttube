@@ -505,13 +505,13 @@ def browse(browse_id, params='', continuation='', hl='en', gl='US',
 
 
 def get_playback(video_id, hl='en', gl='US', opener=None,
-                 clients=PLAYER_CLIENT_ORDER):
+                 clients=PLAYER_CLIENT_ORDER, adaptive=True):
     """Try each player client and return (info, client_name).
 
-    A response with adaptive formats (any video except a live one) or a
-    DASH or HLS manifest wins immediately; otherwise the first playable
-    progressive response is kept as fallback while the remaining clients
-    are tried.
+    A response with a DASH or HLS manifest wins immediately, and so does a
+    response with adaptive formats (any video except a live one) unless
+    adaptive is False; otherwise the first playable response is kept as
+    fallback while the remaining clients are tried.
     """
     fallback = None
     last_info = None
@@ -530,7 +530,7 @@ def get_playback(video_id, hl='en', gl='US', opener=None,
         if not info['playable']:
             continue
         if (info['dash_url'] or info['hls_url']
-                or (info['adaptive'] and not info['is_live'])):
+                or (adaptive and info['adaptive'] and not info['is_live'])):
             return info, client_name
         if fallback is None:
             fallback = (info, client_name)

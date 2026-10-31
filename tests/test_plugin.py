@@ -311,6 +311,41 @@ class PluginTests(unittest.TestCase):
         url = self._play_adaptive(port='', hlsManifestUrl='https://example.test/vod.m3u8')
         self.assertEqual('https://example.test/vod.m3u8', url)
 
+    def test_without_dash_playback_asks_the_next_client_for_hls(self):
+        # android_testsuite gives adaptive formats but no HLS manifest; without
+        # the manifest server, playback must not drop to the 360p file.
+        import test_dash
+        android = player_response()
+        android['streamingData'] = {'adaptiveFormats': test_dash.FOUR_K,
+                                    'formats': player_response()['streamingData']['formats']}
+        ios = player_response()
+        ios['streamingData'] = {'hlsManifestUrl': 'https://example.test/ios.m3u8'}
+        clients = []
+        def transport(url, data, headers, timeout):
+            name = json.loads(data)['context']['client']['clientName']
+            clients.append(name)
+            return json.dumps(ios if name == 'IOS' else android).encode()
+        self.gui.Window.return_value.getProperty.side_effect = lambda key: ''
+        with patch.object(innertube, '_default_opener', side_effect=transport):
+            self.run_route('play/', 'video_id=abc')
+        self.assertEqual('https://example.test/ios.m3u8',
+                         self.gui.ListItem.call_args.kwargs.get('path'))
+        self.assertEqual(['ANDROID', 'IOS'], clients)
+
+    def test_dash_playback_asks_only_one_client(self):
+        clients = []
+        def transport(url, data, headers, timeout):
+            clients.append(json.loads(data)['context']['client']['clientName'])
+            import test_dash
+            playback = player_response()
+            playback['streamingData'] = {'adaptiveFormats': test_dash.FOUR_K}
+            return json.dumps(playback).encode()
+        self.gui.Window.return_value.getProperty.side_effect = lambda key: (
+            '41234' if key == 'SmartTube.ManifestPort' else '')
+        with patch.object(innertube, '_default_opener', side_effect=transport):
+            self.run_route('play/', 'video_id=abc')
+        self.assertEqual(['ANDROID'], clients)
+
     def test_adaptive_formats_without_mp4_audio_fall_back_to_hls(self):
         import test_dash
         formats = [fmt for fmt in test_dash.FOUR_K if not fmt['mimeType'].startswith('audio/mp4')]
