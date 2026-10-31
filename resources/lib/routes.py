@@ -104,7 +104,8 @@ def parse_route(path, query_string=''):
     browse_id = _first(params, 'browse_id', 'browseId')
     live = _first(params, 'live') not in ('', '0', 'false', 'False')
     page = _first(params, 'page')
-    page = int(page) if page.isdecimal() and int(page) > 0 else 1
+    # int() rejects a string of more than 4300 digits
+    page = int(page) if page.isdecimal() and len(page) <= 9 and int(page) > 0 else 1
     if parts[:1] and parts[0] in SECTIONS:
         return Route(parts[0], page=page)
     if parts[:1] == ['explore']:

@@ -207,10 +207,20 @@ def _int(value):
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
 
 
+def _number(text, digits):
+    """The int of an ASCII digit string of at most `digits` digits, else None.
+
+    int() rejects non-ASCII digits and a string of more than 4300 digits.
+    """
+    if isinstance(text, str) and text.isascii() and text.isdigit() and len(text) <= digits:
+        return int(text)
+    return None
+
+
 def _seconds(value):
     """Whole seconds from a digit string or an int; Kodi takes a duration as a C int."""
-    if isinstance(value, str) and value.isascii() and value.isdigit() and len(value) <= 10:
-        value = int(value)
+    if isinstance(value, str):
+        value = _number(value, 10)
     return _int(value) if _int(value) < 2 ** 31 else 0
 
 
@@ -234,11 +244,14 @@ def parse_duration(text):
         return 0
     seconds = 0
     for part in str(text).strip().split(':'):
-        if not (part.isascii() and part.isdigit()):
+        number = _number(part, 10)
+        if number is None:
             return 0
-        seconds = seconds * 60 + int(part)
-    # Kodi takes a duration as a C int
-    return seconds if seconds < 2 ** 31 else 0
+        seconds = seconds * 60 + number
+        # Kodi takes a duration as a C int
+        if seconds >= 2 ** 31:
+            return 0
+    return seconds
 
 
 def _thumbnail_url(renderer):
@@ -695,7 +708,7 @@ def parse_channel_feed(raw):
         thumbnail = entry.find(_MEDIA + 'group/' + _MEDIA + 'thumbnail')
         statistics = entry.find(_MEDIA + 'group/' + _MEDIA + 'community/'
                                 + _MEDIA + 'statistics')
-        views = statistics.get('views') if statistics is not None else ''
+        views = _number(statistics.get('views'), 18) if statistics is not None else None
         date = entry.findtext(_ATOM + 'published') or ''
         items.append({
             'type': 'video',
@@ -703,7 +716,7 @@ def parse_channel_feed(raw):
             'title': entry.findtext(_ATOM + 'title') or '',
             'author': entry.findtext(_ATOM + 'author/' + _ATOM + 'name') or '',
             'duration': 0,
-            'views': '{:,} views'.format(int(views)) if (views or '').isdigit() else '',
+            'views': '{:,} views'.format(views) if views is not None else '',
             'published': date[:10],
             'date': date,
             'thumbnail': thumbnail.get('url') if thumbnail is not None else '',

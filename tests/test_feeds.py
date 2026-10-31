@@ -47,6 +47,11 @@ class ChannelFeedTests(unittest.TestCase):
         bare = feed(CHANNEL, [('vid00000002', 'Bare', 'watch?v=vid00000002', '')])
         bare = bare.replace(b'<media:community><media:statistics views="12345"/></media:community>', b'')
         self.assertEqual('', innertube.parse_channel_feed(bare)[0]['views'])
+        # int() rejects a string of more than 4300 digits and non-ASCII digits
+        for views in ('9' * 4301, '\u00b2', '-5'):
+            odd = feed(CHANNEL, [('vid00000001', 'Odd', 'watch?v=vid00000001', '')]).replace(
+                b'views="12345"', ('views="%s"' % views).encode())
+            self.assertEqual('', innertube.parse_channel_feed(odd)[0]['views'], views[:5])
 
     def test_subscriptions_merge_newest_first_and_report_failures(self):
         feeds = {

@@ -85,7 +85,9 @@ class TextAndDurationTests(unittest.TestCase):
         self.assertEqual(0, innertube.parse_duration('LIVE'))
         self.assertEqual(0, innertube.parse_duration(''))
         # Kodi takes a duration as a C int
-        for label in ('-5:00', '99999999:00', '1:-2', '1.5:00', '1e3'):
+        # int() rejects a string of more than 4300 digits and non-ASCII digits
+        for label in ('-5:00', '99999999:00', '1:-2', '1.5:00', '1e3', '9' * 4301, '1:' + '9' * 4301,
+                      '\u00b2:00', '0:' * 3000 + '9' * 11):
             self.assertEqual(0, innertube.parse_duration(label), label)
 
 

@@ -97,6 +97,8 @@ class AppSectionRouteTests(unittest.TestCase):
         self.assertEqual(1, routes.parse_route('/history/', 'page=x').page)
         self.assertEqual(1, routes.parse_route('/history/', 'page=-4').page)
         self.assertEqual(1, routes.parse_route('/history/', 'page=%C2%B2').page)
+        # int() rejects a string of more than 4300 digits
+        self.assertEqual(1, routes.parse_route('/history/', 'page=' + '9' * 4301).page)
 
     def test_explore_category(self):
         route = routes.parse_route('/explore/gaming/')

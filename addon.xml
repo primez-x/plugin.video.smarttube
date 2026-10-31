@@ -21,6 +21,7 @@
 - A video now plays its HLS stream when YouTube sends a broken DASH format or broken stream data, instead of failing. Broken subtitle or single-file entries no longer stop playback.
 - A recorded live broadcast now plays as a normal video, up to 4K and HDR. Before, the add-on treated the recording as live and found no stream.
 - A broken video length or SponsorBlock time no longer stops playback or skips to the end of the video.
+- A broken video length or view count from YouTube no longer stops a list from opening.
 
 v0.5.2
 - SmartTube now plays the best stream that any YouTube client offers: 4K/HDR DASH first, then the HLS stream, then a single file. A video that some clients offer only as single files now plays instead of failing, and each client is asked once.
