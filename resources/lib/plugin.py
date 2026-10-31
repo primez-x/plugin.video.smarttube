@@ -255,11 +255,14 @@ def _hdr_output():
     Kodi 21 passes the colour data of add-on streams but never sets the HDR
     type, so the display shows HDR video as SDR with wrong colours. Kodi 22
     sets the type (xbmc commit 085c4d3, "[InputStreamAddon] Implemented HDR
-    types").
+    types"). A Kodi 21 build with that commit still reports 21, so the hdr
+    setting 'on' skips the version check.
     """
+    mode = ADDON.getSetting('hdr') or 'auto'
+    if mode == 'off' or not xbmc.getInfoLabel('System.SupportedHDRTypes'):
+        return False
     major = xbmc.getInfoLabel('System.BuildVersion').partition('.')[0]
-    return (major.isdigit() and int(major) >= 22
-            and bool(xbmc.getInfoLabel('System.SupportedHDRTypes')))
+    return mode == 'on' or (major.isdigit() and int(major) >= 22)
 
 
 def _dash_manifest(video_id, info):

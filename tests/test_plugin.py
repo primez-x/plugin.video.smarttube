@@ -291,6 +291,22 @@ class PluginTests(unittest.TestCase):
         self.assertIn('id="315"', self.manifest())
         self.assertNotIn('id="337"', self.manifest())
 
+    def test_hdr_on_plays_hdr_on_kodi_21_with_hdr_support(self):
+        # Firmware with the 085c4d3 backport reports HDR but still says Kodi 21.
+        self.settings['hdr'] = 'on'
+        self._play_adaptive('HDR10, HLG')
+        self.assertIn('id="337"', self.manifest())
+
+    def test_hdr_on_plays_sdr_on_a_display_without_hdr(self):
+        self.settings['hdr'] = 'on'
+        self._play_adaptive('')
+        self.assertNotIn('id="337"', self.manifest())
+
+    def test_hdr_off_plays_sdr_on_kodi_22(self):
+        self.settings['hdr'] = 'off'
+        self._play_adaptive('HDR10, HLG', kodi='22.0-ALPHA2 (21.90.802) Git:20261001')
+        self.assertNotIn('id="337"', self.manifest())
+
     def test_without_the_manifest_server_playback_uses_hls(self):
         url = self._play_adaptive(port='', hlsManifestUrl='https://example.test/vod.m3u8')
         self.assertEqual('https://example.test/vod.m3u8', url)

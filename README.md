@@ -13,8 +13,10 @@ is not the Android SmartTube app and shares no code with it.
   signed-out player clients (testsuite-params, then VR) that the classic
   YouTube add-on defaults to. SmartTube writes a DASH manifest from the
   separate audio and video files and plays the manifest with InputStream
-  Adaptive: VP9 up to 4K60, VP9.2 HDR on Kodi 22 or later when the display
-  reports HDR (Kodi 21 shows add-on HDR streams as SDR), H.264
+  Adaptive: VP9 up to 4K60, VP9.2 HDR when the display reports HDR and the
+  HDR video setting allows HDR (Auto: Kodi 22 or later, because Kodi 21 shows
+  add-on HDR streams as SDR; On: a Kodi 21 build with xbmc commit 085c4d3,
+  such as p3i firmware from 2026-10-30), H.264
   for videos without VP9, and AAC audio (with a set per dubbed language).
   AV1 is not used. Live videos play from YouTube's HLS manifest; the best
   progressive file is the last fallback.

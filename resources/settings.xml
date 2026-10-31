@@ -23,6 +23,20 @@
                         <heading>32021</heading>
                     </control>
                 </setting>
+                <setting id="hdr" type="string" label="32024" help="32028"> <!-- HDR video -->
+                    <level>0</level>
+                    <default>auto</default>
+                    <constraints>
+                        <options>
+                            <option label="32025">auto</option>
+                            <option label="32026">on</option>
+                            <option label="32027">off</option>
+                        </options>
+                    </constraints>
+                    <control type="list" format="string">
+                        <heading>32024</heading>
+                    </control>
+                </setting>
             </group>
         </category>
         <category id="library" label="32080" help=""> <!-- Library -->
