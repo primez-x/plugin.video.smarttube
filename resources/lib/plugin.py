@@ -27,6 +27,7 @@ PROFILE = xbmcvfs.translatePath(ADDON.getAddonInfo('profile'))
 
 sys.path.insert(0, ADDON.getAddonInfo('path') + 'resources/lib')
 
+import dash  # noqa: E402
 import extras  # noqa: E402
 import innertube  # noqa: E402
 import library  # noqa: E402
@@ -248,6 +249,37 @@ def _home(handle, base):
     _finish_listing(handle)
 
 
+def _hdr_output():
+    """True when Kodi can show HDR video from an inputstream add-on.
+
+    Kodi 21 passes the colour data of add-on streams but never sets the HDR
+    type, so the display shows HDR video as SDR with wrong colours. Kodi 22
+    sets the type (xbmc commit 085c4d3, "[InputStreamAddon] Implemented HDR
+    types").
+    """
+    major = xbmc.getInfoLabel('System.BuildVersion').partition('.')[0]
+    return (major.isdigit() and int(major) >= 22
+            and bool(xbmc.getInfoLabel('System.SupportedHDRTypes')))
+
+
+def _dash_manifest(video_id, info):
+    """Write the MPD of a video that is not live; return (url, 'dash') or ('', '').
+
+    The service serves the cache directory on SmartTube.ManifestPort.
+    """
+    port = xbmcgui.Window(10000).getProperty('SmartTube.ManifestPort')
+    if info.get('is_live') or not port.isdigit():
+        return '', ''
+    manifest = dash.manifest(info.get('adaptive'), hdr=_hdr_output())
+    if not manifest:
+        return '', ''
+    # One file per video: the service treats a new URL as a new video.
+    # The service prunes old files with the rest of the cache.
+    name = dash.manifest_name(video_id)
+    library.write_text(os.path.join(CACHE.directory, name), manifest)
+    return 'http://127.0.0.1:%s/%s' % (port, name), 'dash'
+
+
 def _resolve_play(handle, video_id, history=False):
     language, region = _locale()
     try:
@@ -257,7 +289,9 @@ def _resolve_play(handle, video_id, history=False):
         _log('Playback failed for %s: %s' % (video_id, exc),
              xbmc.LOGWARNING)
         info, client_name = None, ''
-    url, kind = innertube.choose_stream(info) if info else ('', '')
+    url, kind = _dash_manifest(video_id, info) if info else ('', '')
+    if not url:
+        url, kind = innertube.choose_stream(info) if info else ('', '')
     if not url:
         reason = (info or {}).get('reason') or 'No playable streams'
         _notify(reason)

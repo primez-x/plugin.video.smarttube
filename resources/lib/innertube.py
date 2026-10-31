@@ -414,7 +414,8 @@ def parse_player_response(data):
     info = {
         'playable': False, 'reason': '', 'title': '', 'author': '',
         'length_seconds': 0, 'is_live': False,
-        'hls_url': '', 'dash_url': '', 'progressive': [], 'captions': [],
+        'hls_url': '', 'dash_url': '', 'adaptive': [], 'progressive': [],
+        'captions': [],
     }
     if not isinstance(data, dict):
         info['reason'] = 'Empty player response'
@@ -446,6 +447,11 @@ def parse_player_response(data):
                 'mime': fmt.get('mimeType') or '',
             })
     info['progressive'].sort(key=lambda f: f['height'], reverse=True)
+    # Separate audio and video files; dash.manifest lists them in one MPD.
+    info['adaptive'] = [
+        fmt for fmt in streaming.get('adaptiveFormats') or []
+        if isinstance(fmt, dict) and fmt.get('url')
+        and fmt.get('initRange') and fmt.get('indexRange')]
     tracks = (((data.get('captions') or {})
                .get('playerCaptionsTracklistRenderer') or {})
               .get('captionTracks')) or []
@@ -456,8 +462,8 @@ def parse_player_response(data):
                 'name': parse_text(track.get('name') or {}),
                 'url': track['baseUrl'],
             })
-    info['playable'] = bool(
-        info['hls_url'] or info['dash_url'] or info['progressive'])
+    info['playable'] = bool(info['hls_url'] or info['dash_url']
+                            or info['adaptive'] or info['progressive'])
     if not info['playable']:
         info['reason'] = 'No playable streams'
     return info
@@ -502,9 +508,10 @@ def get_playback(video_id, hl='en', gl='US', opener=None,
                  clients=PLAYER_CLIENT_ORDER):
     """Try each player client and return (info, client_name).
 
-    A response with a DASH or HLS manifest (full adaptive quality) wins
-    immediately; otherwise the first playable progressive response is kept
-    as fallback while the remaining clients are tried for a manifest.
+    A response with adaptive formats (any video except a live one) or a
+    DASH or HLS manifest wins immediately; otherwise the first playable
+    progressive response is kept as fallback while the remaining clients
+    are tried.
     """
     fallback = None
     last_info = None
@@ -522,7 +529,8 @@ def get_playback(video_id, hl='en', gl='US', opener=None,
         last_info, last_client = info, client_name
         if not info['playable']:
             continue
-        if info['dash_url'] or info['hls_url']:
+        if (info['dash_url'] or info['hls_url']
+                or (info['adaptive'] and not info['is_live'])):
             return info, client_name
         if fallback is None:
             fallback = (info, client_name)

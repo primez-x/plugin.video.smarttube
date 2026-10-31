@@ -113,6 +113,13 @@ class ServiceHistoryTests(ServiceTestCase):
         self.run_service([(STREAM, 100), ('', None)])
         self.assertEqual({}, self.history())
 
+    def test_a_blocked_manifest_directory_keeps_the_service_running(self):
+        Path(self.profile, 'cache').write_text('blocks the directory')
+        service, xbmc = self.run_service([(STREAM, 100), (STREAM, 101), ('', None)])
+        self.assertTrue(any('DASH manifests not served' in str(call.args[0])
+                            for call in xbmc.log.call_args_list))
+        self.assertEqual(101, self.history()['v1']['position'])
+
     def test_an_unwritable_profile_keeps_the_service_running(self):
         service, xbmc = self.run_service([(STREAM, 100), (STREAM, 200), ('', None)], break_store=True)
         self.assertTrue(any('not saved' in str(call.args[0]) for call in xbmc.log.call_args_list))

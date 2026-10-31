@@ -42,18 +42,22 @@ CONTINUE_MIN_SECONDS = 30
 WATCHED_FRACTION = 0.9
 
 
-def _write_json(path, data):
+def write_text(path, text):
     """Replace path atomically; each writer uses its own temporary file."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     handle, temporary = tempfile.mkstemp(
         dir=os.path.dirname(path), prefix=os.path.basename(path), suffix='.tmp')
     try:
         with os.fdopen(handle, 'w', encoding='utf-8') as output:
-            json.dump(data, output, ensure_ascii=False)
+            output.write(text)
         os.replace(temporary, path)
     except BaseException:
         os.unlink(temporary)
         raise
+
+
+def _write_json(path, data):
+    write_text(path, json.dumps(data, ensure_ascii=False))
 
 
 @contextlib.contextmanager

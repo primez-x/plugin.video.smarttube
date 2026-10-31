@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.smarttube" name="SmartTube" version="0.3.1" provider-name="primez-x">
+<addon id="plugin.video.smarttube" name="SmartTube" version="0.4.0" provider-name="primez-x">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="inputstream.adaptive" version="19.0.0"/>
@@ -17,7 +17,12 @@
         <assets>
             <icon>resources/media/icon.png</icon>
         </assets>
-        <news>v0.3.1
+        <news>v0.4.0
+- Play videos up to 4K60 in VP9, and in HDR on Kodi 22 or later when the display supports HDR. SmartTube now builds a DASH manifest from YouTube's separate audio and video files.
+- Seeks and SponsorBlock skips no longer freeze the picture: audio now starts at the same point as video.
+- Dubbed videos offer each audio language, with the original as the default.
+
+v0.3.1
 - SponsorBlock no longer skips far ahead after a seek: skips and resume points use only positions that continue playback. Kodi can report a wrong position while a seek runs.
 
 v0.3.0

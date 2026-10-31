@@ -7,7 +7,8 @@
     This service acts only while Kodi plays that exact stream: it fetches
     the SponsorBlock segments once per file and seeks past them. When the
     resolver also stores SmartTube.Item, the service is the only writer of
-    the watch history and saves the playback position.
+    the watch history and saves the playback position. The service also
+    serves the DASH manifests that the resolver writes.
 
     SPDX-License-Identifier: GPL-2.0-only
 """
@@ -28,6 +29,7 @@ PROFILE = xbmcvfs.translatePath(ADDON.getAddonInfo('profile'))
 
 sys.path.insert(0, ADDON.getAddonInfo('path') + 'resources/lib')
 
+import dash  # noqa: E402
 import extras  # noqa: E402
 import library  # noqa: E402
 
@@ -95,7 +97,18 @@ def main():
     except OSError as exc:
         xbmc.log('[%s] Followed channels not migrated: %s' % (ADDON_ID, exc),
                  xbmc.LOGWARNING)
-    library.Cache(os.path.join(PROFILE, 'cache')).prune(CACHE_MAX_AGE)
+    cache = os.path.join(PROFILE, 'cache')
+    library.Cache(cache).prune(CACHE_MAX_AGE)
+    manifests = None
+    try:
+        os.makedirs(cache, exist_ok=True)
+        manifests = dash.ManifestServer(cache)
+        home.setProperty('SmartTube.ManifestPort', str(manifests.port))
+    except OSError as exc:
+        # Without the port the resolver plays YouTube's HLS stream.
+        home.clearProperty('SmartTube.ManifestPort')
+        xbmc.log('[%s] DASH manifests not served: %s' % (ADDON_ID, exc),
+                 xbmc.LOGWARNING)
     loaded_for = ''
     skips = None
     watched = None
@@ -164,6 +177,9 @@ def main():
             break
     if watched is not None and position is not None:
         _record(watched, position, total)
+    if manifests is not None:
+        home.clearProperty('SmartTube.ManifestPort')
+        manifests.close()
     xbmc.log('[%s] SponsorBlock service stopped' % ADDON_ID, xbmc.LOGINFO)
 
 

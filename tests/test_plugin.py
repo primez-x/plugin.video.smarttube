@@ -254,6 +254,61 @@ class PluginTests(unittest.TestCase):
         self._replay_complete_playback('play/',
             'channel_id=' + CHANNEL + '&live=1', 'recorded_live', live=True)
 
+    def _play_adaptive(self, hdr_types='', port='41234', kodi='21.3 (21.3.0) Git:20261016-p3i', **streaming):
+        import test_dash
+        playback = player_response()
+        playback['streamingData'] = dict({'adaptiveFormats': test_dash.FOUR_K}, **streaming)
+        self.xbmc.getInfoLabel.side_effect = lambda label: {
+            'System.SupportedHDRTypes': hdr_types, 'System.BuildVersion': kodi}.get(label, '')
+        self.gui.Window.return_value.getProperty.side_effect = lambda key: (
+            port if key == 'SmartTube.ManifestPort' else '')
+        with patch.object(innertube, '_default_opener', return_value=json.dumps(playback).encode()):
+            self.run_route('play/', 'video_id=abc')
+        self.assertEqual((7, True), self.kodi.setResolvedUrl.call_args.args[:2])
+        return self.gui.ListItem.call_args.kwargs.get('path') or self.gui.ListItem.call_args.args[0]
+
+    def manifest(self):
+        return (self.profile / 'cache' / 'dash-abc.mpd').read_text()
+
+    def test_adaptive_formats_play_from_a_dash_manifest_served_by_the_service(self):
+        url = self._play_adaptive()
+        self.assertEqual('http://127.0.0.1:41234/dash-abc.mpd', url)
+        self.assertIn('id="315"', self.manifest())
+        self.assertNotIn('id="337"', self.manifest())
+        resolved = self.kodi.setResolvedUrl.call_args.args[2]
+        resolved.setProperty.assert_any_call('inputstream', 'inputstream.adaptive')
+        resolved.setMimeType.assert_called_with('application/dash+xml')
+        self.gui.Window.return_value.setProperty.assert_any_call('SmartTube.StreamUrl', url)
+
+    def test_an_hdr_display_gets_the_hdr_streams_on_kodi_22(self):
+        self._play_adaptive('HDR10, HLG', kodi='22.0-ALPHA2 (21.90.802) Git:20261001')
+        self.assertIn('id="337"', self.manifest())
+
+    def test_kodi_21_gets_sdr_streams_on_an_hdr_display(self):
+        # Kodi 21 never reports HDR for inputstream add-on streams (fixed upstream
+        # in 085c4d3), so the TV would show HDR video as SDR with wrong colours.
+        self._play_adaptive('HDR10, HLG, Dolby Vision')
+        self.assertIn('id="315"', self.manifest())
+        self.assertNotIn('id="337"', self.manifest())
+
+    def test_without_the_manifest_server_playback_uses_hls(self):
+        url = self._play_adaptive(port='', hlsManifestUrl='https://example.test/vod.m3u8')
+        self.assertEqual('https://example.test/vod.m3u8', url)
+
+    def test_adaptive_formats_without_mp4_audio_fall_back_to_hls(self):
+        import test_dash
+        formats = [fmt for fmt in test_dash.FOUR_K if not fmt['mimeType'].startswith('audio/mp4')]
+        playback = player_response()
+        playback['streamingData'] = {'adaptiveFormats': formats,
+                                     'hlsManifestUrl': 'https://example.test/vod.m3u8'}
+        self.gui.Window.return_value.getProperty.side_effect = lambda key: (
+            '41234' if key == 'SmartTube.ManifestPort' else '')
+        with patch.object(innertube, '_default_opener', return_value=json.dumps(playback).encode()):
+            self.run_route('play/', 'video_id=abc')
+        self.assertEqual('https://example.test/vod.m3u8',
+                         self.gui.ListItem.call_args.kwargs.get('path'))
+        self.assertFalse((self.profile / 'cache' / 'dash-abc.mpd').exists())
+
     def _replay_complete_playback(self, path, query, fixture, live):
         listing = (ROOT / 'tests/fixtures' / (fixture + '.json')).read_bytes()
         playback = player_response()

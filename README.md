@@ -11,8 +11,13 @@ is not the Android SmartTube app and shares no code with it.
 - **No setup.** No Google Cloud project, no personal API key, no sign-in.
   Listings use YouTube's public InnerTube WEB client; playback uses the same
   signed-out player clients (testsuite-params, then VR) that the classic
-  YouTube add-on defaults to, preferring DASH/HLS manifests via
-  InputStream Adaptive and falling back to the best progressive file.
+  YouTube add-on defaults to. SmartTube writes a DASH manifest from the
+  separate audio and video files and plays the manifest with InputStream
+  Adaptive: VP9 up to 4K60, VP9.2 HDR on Kodi 22 or later when the display
+  reports HDR (Kodi 21 shows add-on HDR streams as SDR), H.264
+  for videos without VP9, and AAC audio (with a set per dubbed language).
+  AV1 is not used. Live videos play from YouTube's HLS manifest; the best
+  progressive file is the last fallback.
 - **SponsorBlock.** A background service seeks past sponsored and other
   crowd-sourced segments. Each category group can be toggled in settings.
 - **DeArrow.** Clickbait titles and thumbnails in listings are replaced with
@@ -90,10 +95,6 @@ lists the related videos of one video.
 - Google account sync: account subscriptions, watch history, likes,
   comments and account playlists. YouTube blocks sign-in for TV-style
   clients, so SmartTube keeps these lists on the device.
-- Adaptive DASH in the rare case where YouTube returns neither a DASH nor an
-  HLS manifest URL: playback then falls back to the best progressive file
-  (typically up to 720p). Generating an MPD from adaptive formats, as the
-  classic add-on does, is future work.
 - YouTube changes its player clients regularly. When playback breaks for
   everyone, the fix is a client version bump in `resources/lib/innertube.py`
   (`CLIENTS` / `PLAYER_CLIENT_ORDER`), released as a patch version.
@@ -117,7 +118,7 @@ python3 -m unittest discover -s tests
 git config core.hooksPath .githooks
 ```
 
-`innertube.py`, `extras.py`, `library.py` and `routes.py` are pure standard-library Python
+`innertube.py`, `dash.py`, `extras.py`, `library.py` and `routes.py` are pure standard-library Python
 and are fully covered without Kodi or network access; `plugin.py` and
 `service.py` are thin Kodi adapters. Versioning and publishing follow
 `VERSIONING.md` in `primez-x/kodi.addons` (see `AGENTS.md`).

@@ -138,6 +138,18 @@ class PlayerParserTests(unittest.TestCase):
         self.assertEqual(('https://example.test/live.m3u8', 'hls'),
                          innertube.choose_stream(info))
 
+    def test_adaptive_formats_need_a_url_and_byte_ranges(self):
+        ranges = {'initRange': {'start': '0', 'end': '9'}, 'indexRange': {'start': '10', 'end': '99'}}
+        data = player_response()
+        data['streamingData'] = {'adaptiveFormats': [
+            dict(ranges, itag=303, url='https://example.test/303', mimeType='video/webm'),
+            dict(ranges, itag=315, signatureCipher='s=abc&url=x', mimeType='video/webm'),
+            {'itag': 308, 'url': 'https://example.test/308', 'mimeType': 'video/webm'},
+            'not a format']}
+        info = innertube.parse_player_response(data)
+        self.assertEqual([303], [fmt['itag'] for fmt in info['adaptive']])
+        self.assertTrue(info['playable'])
+
     def test_unplayable(self):
         info = innertube.parse_player_response({
             'playabilityStatus': {
@@ -171,6 +183,27 @@ class GetPlaybackTests(unittest.TestCase):
         self.assertTrue(info['playable'])
         self.assertEqual('ios_testsuite', client)
         self.assertEqual(2, len(transport.requests))
+
+    def test_adaptive_formats_win_without_a_manifest(self):
+        data = player_response()
+        data['streamingData'] = {'adaptiveFormats': [{
+            'itag': 303, 'url': 'https://example.test/303', 'mimeType': 'video/webm',
+            'initRange': {'start': '0', 'end': '9'}, 'indexRange': {'start': '10', 'end': '99'}}]}
+        transport = FakeTransport([data])
+        info, client = innertube.get_playback('vid1', opener=transport)
+        self.assertEqual(('android_testsuite', 1), (client, len(transport.requests)))
+
+    def test_live_video_keeps_looking_for_hls(self):
+        adaptive = player_response()
+        adaptive['videoDetails']['isLiveContent'] = True
+        adaptive['streamingData'] = {'adaptiveFormats': [{
+            'itag': 303, 'url': 'https://example.test/303', 'mimeType': 'video/webm',
+            'initRange': {'start': '0', 'end': '9'}, 'indexRange': {'start': '10', 'end': '99'}}]}
+        live = player_response()
+        live['videoDetails']['isLiveContent'] = True
+        live['streamingData'] = {'hlsManifestUrl': 'https://example.test/live.m3u8'}
+        info, client = innertube.get_playback('vid1', opener=FakeTransport([adaptive, live]))
+        self.assertEqual(('ios_testsuite', 'https://example.test/live.m3u8'), (client, info['hls_url']))
 
     def test_request_uses_testsuite_params_and_no_user_key(self):
         transport = FakeTransport([player_response()])
