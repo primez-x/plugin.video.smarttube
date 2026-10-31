@@ -207,6 +207,13 @@ def _int(value):
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
 
 
+def _seconds(value):
+    """Whole seconds from a digit string or an int; Kodi takes a duration as a C int."""
+    if isinstance(value, str) and value.isascii() and value.isdigit() and len(value) <= 10:
+        value = int(value)
+    return _int(value) if _int(value) < 2 ** 31 else 0
+
+
 def parse_text(node):
     """Return plain text from an InnerTube simpleText/runs node."""
     if not isinstance(node, dict):
@@ -225,14 +232,13 @@ def parse_duration(text):
     """Convert '1:02:03' / '12:34' labels to seconds; 0 when unknown/live."""
     if not text:
         return 0
-    parts = str(text).strip().split(':')
-    try:
-        seconds = 0
-        for part in parts:
-            seconds = seconds * 60 + int(part)
-        return seconds
-    except ValueError:
-        return 0
+    seconds = 0
+    for part in str(text).strip().split(':'):
+        if not (part.isascii() and part.isdigit()):
+            return 0
+        seconds = seconds * 60 + int(part)
+    # Kodi takes a duration as a C int
+    return seconds if seconds < 2 ** 31 else 0
 
 
 def _thumbnail_url(renderer):
@@ -442,11 +448,11 @@ def parse_player_response(data):
     details = _dict(data.get('videoDetails'))
     info['title'] = _str(details.get('title'))
     info['author'] = _str(details.get('author'))
-    try:
-        info['length_seconds'] = int(details.get('lengthSeconds') or 0)
-    except (TypeError, ValueError):
-        info['length_seconds'] = 0
-    info['is_live'] = bool(details.get('isLiveContent'))
+    info['length_seconds'] = _seconds(details.get('lengthSeconds'))
+    # isLiveContent stays true after the broadcast ends
+    broadcast = _dict(_dict(_dict(data.get('microformat')).get('playerMicroformatRenderer'))
+                      .get('liveBroadcastDetails'))
+    info['is_live'] = details.get('isLive') is True or broadcast.get('isLiveNow') is True
     info['channel_id'] = _str(details.get('channelId'))
     if status.get('status') != 'OK':
         info['reason'] = (_str(status.get('reason'))

@@ -430,6 +430,26 @@ class PluginTests(unittest.TestCase):
         self.assertEqual('https://example.test/android.m3u8', path)
         self.assertEqual(['ANDROID', 'IOS', 'ANDROID_VR'], clients)
 
+    def test_an_infinite_duration_keeps_the_earlier_hls(self):
+        android = player_response()
+        android['streamingData'] = {'hlsManifestUrl': 'https://example.test/android.m3u8'}
+        ios = player_response()
+        ios['videoDetails']['lengthSeconds'] = float('inf')  # JSON Infinity
+        ios['streamingData'] = {}
+        path, clients = self._play_from_clients(
+            {'ANDROID': android, 'IOS': ios, 'ANDROID_VR': ios}, port='41234')
+        self.assertEqual('https://example.test/android.m3u8', path)
+        self.assertEqual(['ANDROID', 'IOS', 'ANDROID_VR'], clients)
+
+    def test_a_recorded_live_video_plays_dash(self):
+        import test_dash
+        recorded = player_response()
+        recorded['videoDetails'].update(isLiveContent=True, isLive=False)
+        recorded['streamingData'] = {'adaptiveFormats': test_dash.FOUR_K}
+        path, clients = self._play_from_clients({'ANDROID': recorded}, port='41234')
+        self.assertEqual('http://127.0.0.1:41234/dash-abc.mpd', path)
+        self.assertEqual(['ANDROID'], clients)
+
     def test_reversed_byte_ranges_keep_the_earlier_hls(self):
         # ISA would request bytes=2000-220, which the server rejects.
         import test_dash
@@ -459,7 +479,7 @@ class PluginTests(unittest.TestCase):
     def test_live_playback_asks_the_next_client_for_hls(self):
         # A live video has adaptive formats but no DASH manifest from them.
         live = player_response()
-        live['videoDetails']['isLiveContent'] = True
+        live['videoDetails'].update(isLiveContent=True, isLive=True)
         android = json.loads(json.dumps(live))
         android['streamingData'] = {'adaptiveFormats': [{
             'itag': 303, 'url': 'https://example.test/303', 'mimeType': 'video/webm',
@@ -508,7 +528,7 @@ class PluginTests(unittest.TestCase):
     def _replay_complete_playback(self, path, query, fixture, live):
         listing = (ROOT / 'tests/fixtures' / (fixture + '.json')).read_bytes()
         playback = player_response()
-        playback['videoDetails']['isLiveContent'] = live
+        playback['videoDetails'].update(isLiveContent=live, isLive=live)
         if live:
             playback['streamingData']['hlsManifestUrl'] = 'https://example.test/live.m3u8'
         requests = []

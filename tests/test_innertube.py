@@ -84,6 +84,9 @@ class TextAndDurationTests(unittest.TestCase):
         self.assertEqual(3723, innertube.parse_duration('1:02:03'))
         self.assertEqual(0, innertube.parse_duration('LIVE'))
         self.assertEqual(0, innertube.parse_duration(''))
+        # Kodi takes a duration as a C int
+        for label in ('-5:00', '99999999:00', '1:-2', '1.5:00', '1e3'):
+            self.assertEqual(0, innertube.parse_duration(label), label)
 
 
 class ListingParserTests(unittest.TestCase):
@@ -131,7 +134,7 @@ class PlayerParserTests(unittest.TestCase):
 
     def test_live_prefers_hls(self):
         data = player_response()
-        data['videoDetails']['isLiveContent'] = True
+        data['videoDetails'].update(isLiveContent=True, isLive=True)
         data['streamingData']['hlsManifestUrl'] = (
             'https://example.test/live.m3u8')
         info = innertube.parse_player_response(data)
@@ -168,6 +171,26 @@ class PlayerParserTests(unittest.TestCase):
             self.assertIsInstance(info['title'], str)
             self.assertIsInstance(info['author'], str)
             self.assertIsInstance(info['channel_id'], str)
+
+    def test_duration_is_whole_seconds_that_kodi_can_take(self):
+        # JSON 1e309 is an infinite float; Kodi takes the duration as a C int.
+        for value, seconds in (('754', 754), (754, 754), (json.loads('1e309'), 0), (-5, 0),
+                               ('12.5', 0), (True, 0), ('9' * 20, 0), (2 ** 31, 0), ([], 0)):
+            data = player_response()
+            data['videoDetails']['lengthSeconds'] = value
+            self.assertEqual(seconds, innertube.parse_player_response(data)['length_seconds'], value)
+
+    def test_a_recorded_live_video_is_not_live(self):
+        # isLiveContent stays true after the broadcast ends.
+        data = player_response()
+        data['videoDetails'].update(isLiveContent=True, isLive=False)
+        self.assertFalse(innertube.parse_player_response(data)['is_live'])
+        data['videoDetails']['isLive'] = True
+        self.assertTrue(innertube.parse_player_response(data)['is_live'])
+        del data['videoDetails']['isLive']
+        data['microformat'] = {'playerMicroformatRenderer': {
+            'liveBroadcastDetails': {'isLiveNow': True}}}
+        self.assertTrue(innertube.parse_player_response(data)['is_live'])
 
     def test_malformed_formats_and_captions_are_skipped(self):
         data = player_response()

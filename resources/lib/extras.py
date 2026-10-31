@@ -10,6 +10,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
+import math
 import json
 import urllib.error
 import urllib.parse
@@ -64,7 +65,7 @@ def parse_segments(data, video_id):
                 start, end = float(span[0]), float(span[1])
             except (TypeError, ValueError):
                 continue
-            if end > start:
+            if 0 <= start < end < math.inf:
                 segments.append({
                     'category': segment.get('category') or '',
                     'start': start,

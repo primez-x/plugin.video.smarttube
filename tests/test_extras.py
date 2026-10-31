@@ -34,6 +34,15 @@ class SegmentTests(unittest.TestCase):
         self.assertEqual((0.0, 12.0),
                          (segments[0]['start'], segments[0]['end']))
 
+    def test_segments_need_finite_times(self):
+        # JSON 1e309 is an infinite float; a skip to infinity ends the video.
+        data = [{'videoID': 'vid1', 'segments': [
+            {'segment': [10, json.loads('1e309')], 'category': 'sponsor'},
+            {'segment': ['NaN', 20], 'category': 'sponsor'},
+            {'segment': [-5, 3], 'category': 'intro'},
+            {'segment': [30, 40], 'category': 'outro'}]}]
+        self.assertEqual(['outro'], [s['category'] for s in extras.parse_segments(data, 'vid1')])
+
     def test_skip_once_while_inside(self):
         skips = extras.SegmentSkips(
             extras.parse_segments(SEGMENTS_RESPONSE, 'vid1'))
