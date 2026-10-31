@@ -172,42 +172,38 @@ class FakeTransport(object):
         return json.dumps(self.responses.pop(0)).encode('utf-8')
 
 
-class GetPlaybackTests(unittest.TestCase):
-    def test_falls_back_to_next_client(self):
+class PlayerResponsesTests(unittest.TestCase):
+    def test_every_client_answers_in_order(self):
         transport = FakeTransport([
-            {'playabilityStatus': {'status': 'UNPLAYABLE',
-                                   'reason': 'Nope'}},
-            player_response(),
-        ])
-        info, client = innertube.get_playback('vid1', opener=transport)
-        self.assertTrue(info['playable'])
-        self.assertEqual('ios_testsuite', client)
-        self.assertEqual(2, len(transport.requests))
+            {'playabilityStatus': {'status': 'UNPLAYABLE', 'reason': 'Nope'}},
+            player_response(), player_response()])
+        responses = list(innertube.player_responses('vid1', opener=transport))
+        self.assertEqual(['android_testsuite', 'ios_testsuite', 'android_vr'],
+                         [client for _, client in responses])
+        self.assertEqual([False, True, True], [info['playable'] for info, _ in responses])
 
-    def test_adaptive_formats_win_without_a_manifest(self):
-        data = player_response()
-        data['streamingData'] = {'adaptiveFormats': [{
-            'itag': 303, 'url': 'https://example.test/303', 'mimeType': 'video/webm',
-            'initRange': {'start': '0', 'end': '9'}, 'indexRange': {'start': '10', 'end': '99'}}]}
-        transport = FakeTransport([data])
-        info, client = innertube.get_playback('vid1', opener=transport)
-        self.assertEqual(('android_testsuite', 1), (client, len(transport.requests)))
+    def test_responses_are_requested_only_when_needed(self):
+        transport = FakeTransport([player_response()])
+        next(innertube.player_responses('vid1', opener=transport))
+        self.assertEqual(1, len(transport.requests))
 
-    def test_live_video_keeps_looking_for_hls(self):
-        adaptive = player_response()
-        adaptive['videoDetails']['isLiveContent'] = True
-        adaptive['streamingData'] = {'adaptiveFormats': [{
-            'itag': 303, 'url': 'https://example.test/303', 'mimeType': 'video/webm',
-            'initRange': {'start': '0', 'end': '9'}, 'indexRange': {'start': '10', 'end': '99'}}]}
-        live = player_response()
-        live['videoDetails']['isLiveContent'] = True
-        live['streamingData'] = {'hlsManifestUrl': 'https://example.test/live.m3u8'}
-        info, client = innertube.get_playback('vid1', opener=FakeTransport([adaptive, live]))
-        self.assertEqual(('ios_testsuite', 'https://example.test/live.m3u8'), (client, info['hls_url']))
+    def test_a_failed_client_is_skipped(self):
+        def transport(url, data, headers, timeout):
+            if json.loads(data.decode('utf-8'))['context']['client']['clientName'] == 'ANDROID':
+                raise OSError('offline')
+            return json.dumps(player_response()).encode('utf-8')
+        self.assertEqual(['ios_testsuite', 'android_vr'], [
+            client for _, client in innertube.player_responses('vid1', opener=transport)])
+
+    def test_no_answer_is_an_error(self):
+        def transport(url, data, headers, timeout):
+            raise OSError('offline')
+        with self.assertRaises(innertube.InnertubeError):
+            list(innertube.player_responses('vid1', opener=transport))
 
     def test_request_uses_testsuite_params_and_no_user_key(self):
         transport = FakeTransport([player_response()])
-        innertube.get_playback('vid1', opener=transport)
+        next(innertube.player_responses('vid1', opener=transport))
         url, body, headers = transport.requests[0]
         self.assertIn('/youtubei/v1/player?', url)
         self.assertEqual('ANDROID',

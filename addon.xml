@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.video.smarttube" name="SmartTube" version="0.5.1" provider-name="primez-x">
+<addon id="plugin.video.smarttube" name="SmartTube" version="0.5.2" provider-name="primez-x">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
         <import addon="inputstream.adaptive" version="19.0.0"/>
@@ -17,7 +17,10 @@
         <assets>
             <icon>resources/media/icon.png</icon>
         </assets>
-        <news>v0.5.1
+        <news>v0.5.2
+- SmartTube now plays the best stream that any YouTube client offers: 4K/HDR DASH first, then the HLS stream, then a single file. A video that some clients offer only as single files now plays instead of failing, and each client is asked once.
+
+v0.5.1
 - When a video cannot play as DASH, SmartTube now plays YouTube's HLS stream instead of the low-quality single file.
 
 v0.5.0

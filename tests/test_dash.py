@@ -121,6 +121,30 @@ class ManifestTests(unittest.TestCase):
                    video(303, 'vp09.00.41.08', 1080), audio(140)]
         self.assertEqual([303], itags(sets(parse(dash.manifest(formats)))[0]))
 
+    def test_malformed_formats_are_skipped(self):
+        # YouTube data is untrusted: a broken format must not stop the manifest.
+        broken = [video(315, 'vp09.00.51.08', 2160, indexRange={'start': '220'}),
+                  video(308, 'vp09.00.50.08', 1440, initRange={'start': 'x', 'end': '9'}),
+                  dict(video(302, 'vp09.00.40.08', 720), height='720'),
+                  dict(video(301, 'vp09.00.40.08', 720), fps='60'),
+                  video(300, 'vp09.00.40.08', 720, approxDurationMs='long'),
+                  dict(video(299, 'vp09.00.40.08', 720), itag='299'),
+                  audio(141, bitrate='high'), audio(142, audioTrack='en'),
+                  audio(143, audioTrack={'id': 4, 'displayName': 'English'}),
+                  audio(144, audioChannels='2'), audio(145, approxDurationMs='\u00b2'),
+                  audio(146, track=('en.4', 'English\x00', True)),
+                  audio(147, track=('en\x01.4', 'English', True)),
+                  audio(148, track=('en.4', 'English \ud800', True)),
+                  audio(149, audioSampleRate='44\x00'),
+                  dict(audio(150), url=URL % 150 + '\x1f'),
+                  dict(audio(151), mimeType='audio/mp4; codecs="mp4a.40.2\x02"'),
+                  audio(152, bitrate=999998, approxDurationMs='9' * 19),
+                  audio(153, bitrate=999999, approxDurationMs='9' * 4301),
+                  audio(154, bitrate=10 ** 5000), audio(155, approxDurationMs=10 ** 5000),
+                  audio(156, audioChannels=-2)]
+        root = parse(dash.manifest(broken + [video(303, 'vp09.00.41.08', 1080), audio(140)]))
+        self.assertEqual([[303], [140]], [itags(s) for s in sets(root)])
+
     def test_no_manifest_without_video_or_mp4_audio(self):
         self.assertIsNone(dash.manifest([]))
         self.assertIsNone(dash.manifest([audio(140)]))

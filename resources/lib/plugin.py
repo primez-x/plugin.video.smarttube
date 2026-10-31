@@ -265,13 +265,12 @@ def _hdr_output():
     return mode == 'on' or (major.isdigit() and int(major) >= 22)
 
 
-def _dash_manifest(video_id, info):
+def _dash_manifest(video_id, info, port):
     """Write the MPD of a video that is not live; return (url, 'dash') or ('', '').
 
-    The service serves the cache directory on SmartTube.ManifestPort.
+    The service serves the cache directory on port.
     """
-    port = xbmcgui.Window(10000).getProperty('SmartTube.ManifestPort')
-    if info.get('is_live') or not port.isdigit():
+    if info.get('is_live') or not port:
         return '', ''
     manifest = dash.manifest(info.get('adaptive'), hdr=_hdr_output())
     if not manifest:
@@ -279,33 +278,49 @@ def _dash_manifest(video_id, info):
     # One file per video: the service treats a new URL as a new video.
     # The service prunes old files with the rest of the cache.
     name = dash.manifest_name(video_id)
-    library.write_text(os.path.join(CACHE.directory, name), manifest)
+    try:
+        library.write_text(os.path.join(CACHE.directory, name), manifest)
+    except OSError as exc:
+        _log('Cannot write the DASH manifest of %s: %s' % (video_id, exc), xbmc.LOGWARNING)
+        return '', ''
     return 'http://127.0.0.1:%s/%s' % (port, name), 'dash'
 
 
-def _resolve_play(handle, video_id, history=False):
+def _playback(video_id):
+    """Return (url, kind, info, client_name) of the best stream; url is '' without one.
+
+    DASH from the adaptive formats of any client wins, then the first manifest,
+    then the first progressive file. Each client is asked once, in order. A
+    manifest stops the search when no DASH can follow: for a live video, or
+    while the service serves no manifests.
+    """
     language, region = _locale()
+    port = xbmcgui.Window(10000).getProperty('SmartTube.ManifestPort')
+    port = port if port.isdigit() else ''
+    # Without a stream, the first playable response gives the reason, else the last one.
+    best, shown = None, (None, '')
     try:
-        info, client_name = innertube.get_playback(
-            video_id, hl=language, gl=region)
+        for info, client_name in innertube.player_responses(video_id, hl=language, gl=region):
+            if not (shown[0] and shown[0]['playable']):
+                shown = (info, client_name)
+            if not info['playable']:
+                continue
+            url, kind = _dash_manifest(video_id, info, port)
+            if url:
+                return url, kind, info, client_name
+            url, kind = innertube.choose_stream(info)
+            manifest = kind in ('dash', 'hls')
+            if manifest and (info.get('is_live') or not port):
+                return url, kind, info, client_name
+            if url and (best is None or (manifest and best[1] == 'progressive')):
+                best = (url, kind, info, client_name)
     except innertube.InnertubeError as exc:
-        _log('Playback failed for %s: %s' % (video_id, exc),
-             xbmc.LOGWARNING)
-        info, client_name = None, ''
-    url, kind = _dash_manifest(video_id, info) if info else ('', '')
-    if not url and info and not (info['dash_url'] or info['hls_url']):
-        # Without DASH, a manifest from a later client beats a progressive file.
-        later = innertube.PLAYER_CLIENT_ORDER
-        later = later[later.index(client_name) + 1:] if client_name in later else ()
-        try:
-            manifest = innertube.get_playback(video_id, hl=language, gl=region,
-                                              clients=later, adaptive=False)
-        except innertube.InnertubeError:
-            manifest = None
-        if manifest and (manifest[0]['dash_url'] or manifest[0]['hls_url']):
-            info, client_name = manifest
-    if not url:
-        url, kind = innertube.choose_stream(info) if info else ('', '')
+        _log('Playback failed for %s: %s' % (video_id, exc), xbmc.LOGWARNING)
+    return best or ('', '') + shown
+
+
+def _resolve_play(handle, video_id, history=False):
+    url, kind, info, client_name = _playback(video_id)
     if not url:
         reason = (info or {}).get('reason') or 'No playable streams'
         _notify(reason)

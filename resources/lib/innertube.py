@@ -504,19 +504,13 @@ def browse(browse_id, params='', continuation='', hl='en', gl='US',
     return parse_listing_response(data)
 
 
-def get_playback(video_id, hl='en', gl='US', opener=None,
-                 clients=PLAYER_CLIENT_ORDER, adaptive=True):
-    """Try each player client and return (info, client_name).
+def player_responses(video_id, hl='en', gl='US', opener=None):
+    """Yield (info, client_name) for each player client that answers, in order.
 
-    A response with a DASH or HLS manifest wins immediately, and so does a
-    response with adaptive formats (any video except a live one) unless
-    adaptive is False; otherwise the first playable response is kept as
-    fallback while the remaining clients are tried.
+    Raise InnertubeError when no client answers.
     """
-    fallback = None
-    last_info = None
-    last_client = ''
-    for client_name in clients:
+    answered = False
+    for client_name in PLAYER_CLIENT_ORDER:
         try:
             data = innertube_post(
                 'player', client_name,
@@ -525,20 +519,10 @@ def get_playback(video_id, hl='en', gl='US', opener=None,
                 hl=hl, gl=gl, opener=opener)
         except (InnertubeError, urllib.error.URLError, OSError):
             continue
-        info = parse_player_response(data)
-        last_info, last_client = info, client_name
-        if not info['playable']:
-            continue
-        if (info['dash_url'] or info['hls_url']
-                or (adaptive and info['adaptive'] and not info['is_live'])):
-            return info, client_name
-        if fallback is None:
-            fallback = (info, client_name)
-    if fallback is not None:
-        return fallback
-    if last_info is None:
+        answered = True
+        yield parse_player_response(data), client_name
+    if not answered:
         raise InnertubeError('Player request failed for %s' % video_id)
-    return last_info, last_client
 
 
 def _words(text):

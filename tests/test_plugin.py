@@ -332,6 +332,128 @@ class PluginTests(unittest.TestCase):
                          self.gui.ListItem.call_args.kwargs.get('path'))
         self.assertEqual(['ANDROID', 'IOS'], clients)
 
+    def _play_from_clients(self, responses, port=''):
+        """Play abc; return the path and the clients asked. Without a port, no manifest server."""
+        clients = []
+        def transport(url, data, headers, timeout):
+            name = json.loads(data)['context']['client']['clientName']
+            clients.append(name)
+            return json.dumps(responses[name]).encode()
+        self.gui.Window.return_value.getProperty.side_effect = lambda key: (
+            port if key == 'SmartTube.ManifestPort' else '')
+        with patch.object(innertube, '_default_opener', side_effect=transport):
+            self.run_route('play/', 'video_id=abc')
+        resolved = self.kodi.setResolvedUrl.call_args.args[1]
+        return resolved and self.gui.ListItem.call_args.kwargs.get('path'), clients
+
+    @staticmethod
+    def _progressive(url):
+        playback = player_response()
+        playback['streamingData'] = {'formats': [
+            {'itag': 22, 'url': url, 'height': 720, 'mimeType': 'video/mp4'}]}
+        return playback
+
+    def test_a_later_progressive_file_plays_when_the_first_client_has_only_adaptive_formats(self):
+        import test_dash
+        android = player_response()
+        android['streamingData'] = {'adaptiveFormats': test_dash.FOUR_K}
+        path, clients = self._play_from_clients({
+            'ANDROID': android, 'IOS': self._progressive('https://example.test/ios.mp4'),
+            'ANDROID_VR': self._progressive('https://example.test/vr.mp4')})
+        self.assertEqual('https://example.test/ios.mp4', path)
+        self.assertEqual(['ANDROID', 'IOS', 'ANDROID_VR'], clients)
+
+    def test_each_client_is_asked_once_when_every_client_has_only_progressive_files(self):
+        path, clients = self._play_from_clients({
+            name: self._progressive('https://example.test/%s.mp4' % name)
+            for name in ('ANDROID', 'IOS', 'ANDROID_VR')})
+        self.assertEqual('https://example.test/ANDROID.mp4', path)
+        self.assertEqual(['ANDROID', 'IOS', 'ANDROID_VR'], clients)
+
+    def test_dash_from_a_later_client_beats_an_earlier_hls_manifest(self):
+        import test_dash
+        android = player_response()
+        android['streamingData'] = {'hlsManifestUrl': 'https://example.test/android.m3u8'}
+        ios = player_response()
+        ios['streamingData'] = {'adaptiveFormats': test_dash.FOUR_K}
+        path, clients = self._play_from_clients(
+            {'ANDROID': android, 'IOS': ios, 'ANDROID_VR': android}, port='41234')
+        self.assertEqual('http://127.0.0.1:41234/dash-abc.mpd', path)
+        self.assertEqual(['ANDROID', 'IOS'], clients)
+
+    def test_an_hls_manifest_beats_a_later_progressive_file(self):
+        android = player_response()
+        android['streamingData'] = {'hlsManifestUrl': 'https://example.test/android.m3u8'}
+        path, clients = self._play_from_clients({
+            'ANDROID': android, 'IOS': self._progressive('https://example.test/ios.mp4'),
+            'ANDROID_VR': self._progressive('https://example.test/vr.mp4')}, port='41234')
+        self.assertEqual('https://example.test/android.m3u8', path)
+        self.assertEqual(['ANDROID', 'IOS', 'ANDROID_VR'], clients)
+
+    def test_a_failed_manifest_write_keeps_the_earlier_hls(self):
+        import test_dash
+        android = player_response()
+        android['streamingData'] = {'hlsManifestUrl': 'https://example.test/android.m3u8'}
+        ios = player_response()
+        ios['streamingData'] = {'adaptiveFormats': test_dash.FOUR_K}
+        write_text = self.plugin.library.write_text
+        def full_disk(path, text):
+            if path.endswith('.mpd'):
+                raise OSError('disk full')
+            write_text(path, text)
+        with patch.object(self.plugin.library, 'write_text', side_effect=full_disk):
+            path, clients = self._play_from_clients(
+                {'ANDROID': android, 'IOS': ios, 'ANDROID_VR': ios}, port='41234')
+        self.assertEqual('https://example.test/android.m3u8', path)
+        self.assertEqual(['ANDROID', 'IOS', 'ANDROID_VR'], clients)
+
+    def test_an_unwritable_manifest_keeps_the_earlier_hls(self):
+        # An unpaired surrogate in a track name is not valid XML or UTF-8.
+        import test_dash
+        android = player_response()
+        android['streamingData'] = {'hlsManifestUrl': 'https://example.test/android.m3u8'}
+        ios = player_response()
+        ios['streamingData'] = {'adaptiveFormats': test_dash.FOUR_K[:-3] + [test_dash.audio(
+            140, track=('en.4', 'English \ud800', True))]}
+        path, clients = self._play_from_clients(
+            {'ANDROID': android, 'IOS': ios, 'ANDROID_VR': ios}, port='41234')
+        self.assertEqual('https://example.test/android.m3u8', path)
+        self.assertEqual(['ANDROID', 'IOS', 'ANDROID_VR'], clients)
+
+    def test_a_later_client_restriction_is_not_the_reason(self):
+        # The first client answers, but no stream can play without the manifest server.
+        import test_dash
+        android = player_response()
+        android['streamingData'] = {'adaptiveFormats': test_dash.FOUR_K}
+        restricted = {'playabilityStatus': {'status': 'LOGIN_REQUIRED',
+                                            'reason': 'Sign in to confirm your age'}}
+        path, clients = self._play_from_clients(
+            {'ANDROID': android, 'IOS': restricted, 'ANDROID_VR': restricted})
+        self.assertFalse(path)
+        self.assertEqual('No playable streams',
+                         self.gui.Dialog.return_value.notification.call_args.args[1])
+
+    def test_live_playback_asks_the_next_client_for_hls(self):
+        # A live video has adaptive formats but no DASH manifest from them.
+        live = player_response()
+        live['videoDetails']['isLiveContent'] = True
+        android = json.loads(json.dumps(live))
+        android['streamingData'] = {'adaptiveFormats': [{
+            'itag': 303, 'url': 'https://example.test/303', 'mimeType': 'video/webm',
+            'initRange': {'start': '0', 'end': '9'}, 'indexRange': {'start': '10', 'end': '99'}}]}
+        live['streamingData'] = {'hlsManifestUrl': 'https://example.test/live.m3u8'}
+        path, clients = self._play_from_clients({'ANDROID': android, 'IOS': live})
+        self.assertEqual('https://example.test/live.m3u8', path)
+        self.assertEqual(['ANDROID', 'IOS'], clients)
+
+    def test_an_unplayable_video_shows_the_reason(self):
+        unplayable = {'playabilityStatus': {'status': 'UNPLAYABLE', 'reason': 'Video unavailable'}}
+        path, clients = self._play_from_clients(
+            dict.fromkeys(('ANDROID', 'IOS', 'ANDROID_VR'), unplayable))
+        self.assertFalse(path)
+        self.assertEqual(['ANDROID', 'IOS', 'ANDROID_VR'], clients)
+        self.assertEqual('Video unavailable', self.gui.Dialog.return_value.notification.call_args.args[1])
+
     def test_dash_playback_asks_only_one_client(self):
         clients = []
         def transport(url, data, headers, timeout):

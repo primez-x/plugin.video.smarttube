@@ -27,11 +27,45 @@ HDR_TRANSFERS = ('COLOR_TRANSFER_CHARACTERISTICS_SMPTEST2084',
                  'COLOR_TRANSFER_CHARACTERISTICS_ARIB_STD_B67')
 
 
+# 18 digits fit a 64 bit byte offset or duration
+def _int(value):
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value < 10 ** 18
+
+
+def _digits(value):
+    return _int(value) or (isinstance(value, str) and value.isascii() and value.isdigit()
+                           and len(value) <= 18)
+
+
+# The characters that XML 1.0 allows
+_XML_TEXT = re.compile('[\t\n\r\x20-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]*\\Z')
+
+
+def _text(value):
+    return isinstance(value, str) and _XML_TEXT.match(value) is not None
+
+
 def _usable(fmt):
-    return (isinstance(fmt, dict) and fmt.get('url') and fmt.get('mimeType')
-            and isinstance(fmt.get('initRange'), dict)
-            and isinstance(fmt.get('indexRange'), dict)
-            and not fmt.get('isDrc'))
+    """Check every field the manifest reads: YouTube data is untrusted."""
+    if not isinstance(fmt, dict) or fmt.get('isDrc'):
+        return False
+    if not (_int(fmt.get('itag')) and _text(fmt.get('url')) and fmt['url']
+            and _text(fmt.get('mimeType')) and fmt['mimeType']):
+        return False
+    if not all(isinstance(fmt.get(key), dict) and _digits(fmt[key].get('start'))
+               and _digits(fmt[key].get('end')) for key in ('initRange', 'indexRange')):
+        return False
+    if not all(fmt.get(key) is None or _int(fmt[key])
+               for key in ('height', 'width', 'fps', 'bitrate', 'audioChannels')):
+        return False
+    if not all(fmt.get(key) in (None, '') or _digits(fmt[key])
+               for key in ('approxDurationMs', 'audioSampleRate')):
+        return False
+    track = fmt.get('audioTrack')
+    if track is not None and not (isinstance(track, dict) and all(
+            track.get(key) is None or _text(track[key]) for key in ('id', 'displayName'))):
+        return False
+    return fmt.get('colorInfo') is None or isinstance(fmt['colorInfo'], dict)
 
 
 def _mime(fmt):
@@ -107,10 +141,10 @@ def manifest(formats, hdr=False):
     videos, audios = _video_set(formats, hdr), _audio_sets(formats)
     if not videos or not audios:
         return None
-    duration = max(int(fmt.get('approxDurationMs') or 0) for fmt in videos + audios) / 1000.0
+    duration = divmod(max(int(fmt.get('approxDurationMs') or 0) for fmt in videos + audios), 1000)
     lines = ['<?xml version="1.0" encoding="UTF-8"?>',
              '<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" minBufferTime="PT1.5S"'
-             ' mediaPresentationDuration="PT%.3fS" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011">'
+             ' mediaPresentationDuration="PT%d.%03dS" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011">'
              % duration,
              ' <Period>',
              '  <AdaptationSet contentType="video" mimeType=%s subsegmentAlignment="true">'
